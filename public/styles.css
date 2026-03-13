@@ -273,8 +273,18 @@ body {
 
 .cell--camp {
   border-radius: 999px;
-  background: transparent;
-  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: rgba(200, 185, 240, 0.18);
+  border: 1px solid rgba(200, 185, 240, 0.55) !important;
+  cursor: pointer;
+}
+.campLabel {
+  font-size: 0.38em;
+  color: rgba(210, 195, 245, 0.80);
+  font-weight: bold;
+  text-align: center;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
 }
 
 .cell--mountain {
@@ -292,9 +302,19 @@ body {
   user-select: none;
 }
 
+.hqLabel {
+  font-size: 0.36em;
+  color: rgba(210, 195, 255, 0.85);
+  font-weight: bold;
+  text-align: center;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
 .cell--hq {
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), rgba(0, 0, 0, 0.3));
-  border: 1px solid rgba(124, 58, 237, 0.8);
+  background: rgba(124, 58, 237, 0.30);
+  border: 1px solid rgba(180, 150, 255, 0.70) !important;
 }
 
 .cellTokenHost {
@@ -309,8 +329,12 @@ body {
   top: 2px;
   left: 3px;
   font-size: 8px;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.5);
   line-height: 1;
+  display: none;
+}
+body.debug .cellCoord {
+  display: block;
 }
 
 .token {

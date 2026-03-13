@@ -271,6 +271,13 @@ function ensureBoardViews(state) {
     cell.dataset.r = String(r);
     cell.dataset.c = String(c);
 
+    if (type === "camp" || type === "hq") {
+      const lbl = document.createElement("div");
+      lbl.className = type === "camp" ? "campLabel" : "hqLabel";
+      lbl.textContent = type === "camp" ? "行营" : "大本营";
+      cell.appendChild(lbl);
+    }
+
     const coord = document.createElement("div");
     coord.className = "cellCoord";
     coord.textContent = `${r},${c}`;
@@ -844,4 +851,9 @@ $("chatInput").addEventListener("keydown", (e) => {
 });
 
 $("randomizeBtn").addEventListener("click", randomizePlacement);
+
+$("debugBtn").addEventListener("click", () => {
+  document.body.classList.toggle("debug");
+  $("debugBtn").textContent = document.body.classList.contains("debug") ? "Debug: ON" : "Debug: OFF";
+});
 
