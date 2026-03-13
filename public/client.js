@@ -129,10 +129,60 @@ function ensureSeatViews() {
 function ensureBoardViews(state) {
   const boardEl = $("board");
   if (!boardEl || boardViews.size || !state?.board) return;
-  const { rows, cols, cells } = state.board;
+  const { rows, cols, cells, railEdges } = state.board;
   boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   boardEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
   boardEl.innerHTML = "";
+
+  // ── SVG overlay (z-index 0, below cells) ────────────────────────────────
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${cols} ${rows}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.classList.add("boardSvg");
+  boardEl.appendChild(svg);
+
+  function svgLine(x1, y1, x2, y2, cls) {
+    const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    l.setAttribute("x1", String(x1)); l.setAttribute("y1", String(y1));
+    l.setAttribute("x2", String(x2)); l.setAttribute("y2", String(y2));
+    l.setAttribute("class", cls);
+    svg.appendChild(l);
+  }
+
+  // Pre-build sets for fast lookup
+  const activeKeys = new Set(cells.filter(c => c.type !== "inactive").map(c => `${c.r},${c.c}`));
+  const railSet = new Set();
+  for (const [a, b] of (railEdges ?? [])) {
+    const k = a.r < b.r || (a.r === b.r && a.c <= b.c)
+      ? `${a.r},${a.c},${b.r},${b.c}` : `${b.r},${b.c},${a.r},${a.c}`;
+    railSet.add(k);
+  }
+  function edgeKey(r1, c1, r2, c2) {
+    return r1 < r2 || (r1 === r2 && c1 <= c2)
+      ? `${r1},${c1},${r2},${c2}` : `${r2},${c2},${r1},${c1}`;
+  }
+
+  // Draw road lines (non-railway adjacencies first, then railway on top)
+  for (const { r, c, type } of cells) {
+    if (type === "inactive") continue;
+    // right neighbour
+    if (activeKeys.has(`${r},${c + 1}`)) {
+      const k = edgeKey(r, c, r, c + 1);
+      if (!railSet.has(k)) svgLine(c + 0.5, r + 0.5, c + 1.5, r + 0.5, "boardRoad");
+    }
+    // bottom neighbour
+    if (activeKeys.has(`${r + 1},${c}`)) {
+      const k = edgeKey(r, c, r + 1, c);
+      if (!railSet.has(k)) svgLine(c + 0.5, r + 0.5, c + 0.5, r + 1.5, "boardRoad");
+    }
+  }
+  // Draw railway lines (two-layer: golden base + black dashes)
+  for (const [a, b] of (railEdges ?? [])) {
+    const x1 = a.c + 0.5, y1 = a.r + 0.5, x2 = b.c + 0.5, y2 = b.r + 0.5;
+    svgLine(x1, y1, x2, y2, "boardRailBase");
+    svgLine(x1, y1, x2, y2, "boardRailDash");
+  }
+  // ────────────────────────────────────────────────────────────────────────
 
   for (const cellDef of cells) {
     const { r, c, type } = cellDef;
@@ -201,6 +251,10 @@ function render() {
     myPieces.length > 0 && myPieces.every((p) => p.pos !== null);
   $("readyBtn").disabled = !me || !me.seat || me.ready || !allMyPiecesPlaced;
   $("unreadyBtn").disabled = !me || !me.seat || !me.ready;
+  // Hide lobby controls (ready, randomize) once the game is under way.
+  const inPlay = state.phase === "play" || state.phase === "done";
+  const lobbyEl = $("lobbyControls");
+  if (lobbyEl) lobbyEl.style.display = inPlay ? "none" : "";
 }
 
 function renderSeats(state) {
@@ -298,6 +352,7 @@ function formatSideCoord(piece) {
 
 function renderPieces(state) {
   const list = $("piecesList");
+  if (!list) return;
   list.innerHTML = "";
   const myPieces = state.pieces.filter((p) => p.ownerSeat && isMineSeat(state, p.ownerSeat));
 

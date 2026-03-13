@@ -44,9 +44,14 @@
             <div id="seatsGrid" class="seatsGrid"></div>
           </div>
 
-          <div class="row gap">
-            <button id="readyBtn" class="btn primary" disabled>Ready</button>
-            <button id="unreadyBtn" class="btn" disabled>Not ready</button>
+          <div id="lobbyControls">
+            <div class="row gap" style="margin-bottom:8px">
+              <button id="readyBtn" class="btn primary" disabled>Ready</button>
+              <button id="unreadyBtn" class="btn" disabled>Not ready</button>
+            </div>
+            <div class="row gap">
+              <button id="randomizeBtn" class="btn" style="flex:1">Random setup</button>
+            </div>
           </div>
 
           <div class="divider"></div>
@@ -67,19 +72,8 @@
           <div id="board" class="board"></div>
           <div id="hint" class="hint muted"></div>
           <div class="legend muted">
-            Simple rules: place pieces in placement phase, then take turns moving 1 step. (Not full 军棋 rules.)
+            Click your piece on the board to select it, then click a destination. Railway pieces can slide multiple steps.
           </div>
-        </section>
-
-        <section class="panel">
-          <div class="panelHeader">
-            <div>
-              <div class="panelTitle">Your pieces</div>
-              <div class="panelSubtitle muted">Click a piece then click a cell to place/move</div>
-            </div>
-            <button id="randomizeBtn" class="btn">Random setup</button>
-          </div>
-          <div id="piecesList" class="piecesList"></div>
         </section>
       </main>
     </div>

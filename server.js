@@ -51,10 +51,10 @@ const PIECE_DEFS = [
   { type: "major", label: "营长(35)", rank: 4, count: 2 },
   { type: "captain", label: "连长(34)", rank: 3, count: 3 },
   { type: "lieutenant", label: "排长(33)", rank: 2, count: 3 },
-  { type: "engineer", label: "工兵(32)", rank: 1, count: 3 },
-  { type: "bomb", label: "炸弹(B)", rank: null, count: 2 },
-  { type: "mine", label: "地雷(M)", rank: null, count: 3 },
-  { type: "flag", label: "军旗(F)", rank: null, count: 1 }
+  { type: "engineer", label: "工兵(1)", rank: 1, count: 3 },
+  { type: "bomb", label: "炸弹(0)", rank: null, count: 2 },
+  { type: "mine", label: "地雷(X)", rank: null, count: 3 },
+  { type: "flag", label: "军旗($)", rank: null, count: 1 }
 ];
 
 /**
@@ -73,7 +73,7 @@ const PIECE_DEFS = [
 function createBoard() {
   const rows = 17;
   const cols = 17;
-  /** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"|"inactive"}[]}} */
+  /** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"|"inactive"}[], railEdges:[{r:number,c:number},{r:number,c:number}][]}} */
   // @ts-ignore
   const board = { rows, cols, cells: [] };
 
@@ -119,6 +119,60 @@ function createBoard() {
   mark(8, 13, "camp"); // centre camp
   mark(7, 14, "camp"); mark(9, 14, "camp");
 
+  // ── Railway edge topology ──────────────────────────────────────────────────
+  // Layout (same structure for each arm, described for N; others are symmetric):
+  //   • Back row/col: row 1 for N, row 15 for S, col 1 for W, col 15 for E
+  //   • Front row/col: row 5 for N, row 11 for S, col 5 for W, col 11 for E
+  //   • HQ rows/cols (0, 16, 0, 16) are OFF the railway
+  //   • The col/row sides of each arm connect back↔front and reach into the center loop
+  //   • Center inner loop (border of 5×5 center square) links all four arms
+  //   • No diagonal spine; straight-line-only movement enforced in isValidRailwayMove
+  const railEdges = [];
+  function re(r1, c1, r2, c2) { railEdges.push([{ r: r1, c: c1 }, { r: r2, c: c2 }]); }
+
+  // N arm  (rows 0-5, cols 6-10 — HQ row 0 excluded)
+  for (let c = 6; c < 10; c++) re(1, c, 1, c + 1);    // back row 1
+  for (let c = 6; c < 10; c++) re(5, c, 5, c + 1);    // front row 5
+  for (let r = 1; r < 6; r++)  re(r, 6, r + 1, 6);    // left col 6  (rows 1→6, joins center)
+  for (let r = 1; r < 6; r++)  re(r, 10, r + 1, 10);  // right col 10 (rows 1→6, joins center)
+
+  // S arm  (rows 11-16, cols 6-10 — HQ row 16 excluded)
+  for (let c = 6; c < 10; c++) re(11, c, 11, c + 1);  // front row 11
+  for (let c = 6; c < 10; c++) re(15, c, 15, c + 1);  // back row 15
+  for (let r = 10; r < 15; r++) re(r, 6, r + 1, 6);   // left col 6  (rows 10→15)
+  for (let r = 10; r < 15; r++) re(r, 10, r + 1, 10); // right col 10 (rows 10→15)
+
+  // W arm  (rows 6-10, cols 0-5 — HQ col 0 excluded)
+  for (let r = 6; r < 10; r++) re(r, 1, r + 1, 1);    // back col 1
+  for (let r = 6; r < 10; r++) re(r, 5, r + 1, 5);    // front col 5
+  for (let c = 1; c < 6; c++)  re(6, c, 6, c + 1);    // top row 6   (cols 1→6, joins center)
+  for (let c = 1; c < 6; c++)  re(10, c, 10, c + 1);  // bottom row 10 (cols 1→6)
+
+  // E arm  (rows 6-10, cols 11-16 — HQ col 16 excluded)
+  for (let r = 6; r < 10; r++) re(r, 11, r + 1, 11);  // front col 11
+  for (let r = 6; r < 10; r++) re(r, 15, r + 1, 15);  // back col 15
+  for (let c = 10; c < 15; c++) re(6, c, 6, c + 1);   // top row 6   (cols 10→15)
+  for (let c = 10; c < 15; c++) re(10, c, 10, c + 1); // bottom row 10 (cols 10→15)
+
+  // Center inner loop (border of 5×5 center square, rows/cols 6-10)
+  for (let c = 6; c < 10; c++) re(6, c, 6, c + 1);    // top    row 6
+  for (let r = 6; r < 10; r++) re(r, 10, r + 1, 10);  // right  col 10
+  for (let c = 6; c < 10; c++) re(10, c, 10, c + 1);  // bottom row 10
+  for (let r = 6; r < 10; r++) re(r, 6, r + 1, 6);    // left   col 6
+
+  // Center cross: col 8 (rows 5→11) and row 8 (cols 5→11)
+  // Connects N front row ↔ S front row and W front col ↔ E front col through center.
+  for (let r = 5; r < 11; r++) re(r, 8, r + 1, 8);    // vertical   col 8
+  for (let c = 5; c < 11; c++) re(8, c, 8, c + 1);    // horizontal row 8
+
+  // Diagonal corner connectors — join adjacent arm railways at the four junctions.
+  // Engineers can turn here; other pieces cannot use these edges (straight-line rule).
+  re(5, 6,  6,  5);   // N-arm left   ↔ W-arm top
+  re(5, 10, 6,  11);  // N-arm right  ↔ E-arm top
+  re(11, 6, 10, 5);   // S-arm left   ↔ W-arm bottom
+  re(11, 10, 10, 11); // S-arm right  ↔ E-arm bottom
+
+  board.railEdges = railEdges;
   return board;
 }
 
@@ -218,6 +272,96 @@ function chooseSeat(room) {
   return null;
 }
 
+/** Build (lazily cached) adjacency map from railEdges for BFS. */
+function getRailAdj(room) {
+  if (room._railAdj) return room._railAdj;
+  const adj = new Map();
+  for (const [a, b] of room.board.railEdges) {
+    const ak = `${a.r},${a.c}`, bk = `${b.r},${b.c}`;
+    if (!adj.has(ak)) adj.set(ak, []);
+    if (!adj.has(bk)) adj.set(bk, []);
+    adj.get(ak).push(b);
+    adj.get(bk).push(a);
+  }
+  room._railAdj = adj;
+  return adj;
+}
+
+/**
+ * Railway move validator.
+ *
+ * Engineers (工兵): full BFS — may turn freely at any junction, still blocked
+ *   by pieces on intermediate cells.
+ *
+ * All other pieces: directional BFS — must travel in a straight line (same row
+ *   or column), but may pass through EXACTLY ONE diagonal connector per move.
+ *   The diagonal connector resets the travel direction, allowing the piece to
+ *   then continue straight in any direction on the new arm.
+ *   Example: (1,6) → down col 6 → (5,6) → diagonal → (6,5) → left row 6 → (6,2).
+ *
+ * Capture / camp validity is checked by the caller after this returns true.
+ */
+function isValidRailwayMove(room, piece, from, to) {
+  const adj = getRailAdj(room);
+  const startKey = `${from.r},${from.c}`;
+  if (!adj.has(startKey)) return false; // source not on railway
+  const toKey = `${to.r},${to.c}`;
+
+  if (piece.type === "engineer") {
+    // BFS: can turn at any junction, blocked by any piece on intermediate cells.
+    const visited = new Set([startKey]);
+    const queue = [from];
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      for (const next of (adj.get(`${cur.r},${cur.c}`) ?? [])) {
+        const nk = `${next.r},${next.c}`;
+        if (visited.has(nk)) continue;
+        visited.add(nk);
+        if (nk === toKey) return true;
+        if (pieceAt(room, next)) continue; // blocked
+        queue.push(next);
+      }
+    }
+    return false;
+  }
+
+  // ── Non-engineer: DFS with direction tracking ─────────────────────────────
+  // At every step the new edge direction must have a strictly positive dot
+  // product with the current travel direction — no turns ≥ 90°.
+  // This single rule handles both straight rail travel and diagonal connector
+  // transitions naturally:
+  //   • Straight continuation  (1,0)→(1,0):   dot = 1  ✓
+  //   • Diagonal entered "with the grain", e.g. (1,0)→(1,−1): dot = 1  ✓
+  //   • Diagonal entered against the grain,  (−1,0)→(1,−1): dot = −1  ✗
+  //   • 90° turn at any regular junction     (1,0)→(0,1):  dot = 0  ✗
+  // (dr=0, dc=0 represents the initial "no direction yet" state.)
+
+  const visited = new Set();
+
+  function dfs(r, c, dr, dc) {
+    for (const next of (adj.get(`${r},${c}`) ?? [])) {
+      const ndr = Math.sign(next.r - r);
+      const ndc = Math.sign(next.c - c);
+
+      // No sharp turns: dot product with current direction must be > 0.
+      // Skip the check entirely on the first step (dr=dc=0).
+      if ((dr !== 0 || dc !== 0) && (dr * ndr + dc * ndc) <= 0) continue;
+
+      const sk = `${next.r},${next.c},${ndr},${ndc}`;
+      if (visited.has(sk)) continue;
+      visited.add(sk);
+
+      if (next.r === to.r && next.c === to.c) return true;
+      if (pieceAt(room, next)) continue; // blocked intermediate cell
+
+      if (dfs(next.r, next.c, ndr, ndc)) return true;
+    }
+    return false;
+  }
+
+  return dfs(from.r, from.c, 0, 0);
+}
+
 function broadcastState(room) {
   for (const [pid, p] of room.players) {
     safeSend(p.ws, { type: "state", state: roomSnapshotFor(room, pid) });
@@ -231,8 +375,7 @@ function allPiecesPlaced(room, playerId) {
 
 function maybeAdvancePhase(room) {
   // Placement now happens in the lobby phase before declaring ready.
-  // The game starts (LOBBY → PLAY) once every seated player is ready
-  // AND has placed all their pieces.
+  // The game starts (LOBBY → PLAY) once every seated player is ready.
   if (room.phase !== PHASES.LOBBY) return;
 
   const seatedPlayers = Array.from(room.players.values()).filter((p) => p.seat);
@@ -240,9 +383,6 @@ function maybeAdvancePhase(room) {
 
   const allReady = seatedPlayers.every((p) => p.ready);
   if (!allReady) return;
-
-  const allPlaced = seatedPlayers.every((p) => allPiecesPlaced(room, p.id));
-  if (!allPlaced) return;
 
   room.phase = PHASES.PLAY;
   room.turnSeat = SEATS.find((s) => room.seatToPlayerId.has(s)) ?? null;
@@ -601,14 +741,18 @@ wss.on("connection", (ws, req) => {
       if (piece.type === "flag" || piece.type === "mine") return; // cannot move
       const from = piece.pos;
       if (from.r === to.r && from.c === to.c) return;
-      const target = pieceAt(room, to);
 
-      // Move 1-step orthogonally (we do not model full railroad topology here).
-      const manhattan = Math.abs(from.r - to.r) + Math.abs(from.c - to.c);
-      if (manhattan !== 1) return;
+      // Validate move: 1-step road OR multi-step railway slide.
+      const dr = Math.abs(to.r - from.r), dc = Math.abs(to.c - from.c);
+      const isRoadMove = dr + dc === 1;
+      if (!isRoadMove && !isValidRailwayMove(room, piece, from, to)) return;
+
+      const target = pieceAt(room, to);
+      if (target && target.ownerId === playerId) return; // can't capture own piece
+      // Pieces on camp cells are immune to capture.
+      if (target && boardCellAt(room.board, to)?.type === "camp") return;
 
       let capture = null;
-      if (target && target.ownerId === playerId) return;
       if (target) {
         capture = resolveCapture(piece, target);
         if (piece.alive !== false) piece.pos = to;

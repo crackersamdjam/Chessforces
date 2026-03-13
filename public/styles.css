@@ -73,12 +73,12 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 320px 1fr 280px;
+  grid-template-columns: 300px 1fr;
   gap: 14px;
   margin-top: 14px;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 860px) {
   .layout {
     grid-template-columns: 1fr;
   }
@@ -240,10 +240,10 @@ body {
   background: url("/board-4p.png") center/contain no-repeat, radial-gradient(circle at 50% 50%, #111827, #020617);
 }
 .cell {
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.18);
-  border-radius: 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -251,9 +251,10 @@ body {
   position: relative;
   overflow: hidden;
   min-height: 0;
+  z-index: 1;
 }
 .cell:hover {
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(255, 255, 255, 0.07);
 }
 .cell--inactive {
   background: transparent !important;
@@ -369,6 +370,43 @@ body {
   color: rgba(255, 255, 255, 0.5);
   font-size: 11px;
   margin-left: 6px;
+}
+
+/* ── Board SVG connection lines ─────────────────────────────────────────── */
+/* The SVG sits as an absolute child of .board (z-index 0, below cells).     */
+/* Cells are transparent so lines show through from cell center to center.   */
+.boardSvg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible;
+}
+/* Thin road lines between all adjacent active cells */
+.boardRoad {
+  stroke: rgba(180, 140, 80, 0.35);
+  stroke-width: 0.05;
+  stroke-linecap: round;
+}
+/* Railway — base layer (golden) */
+.boardRailBase {
+  stroke: rgba(255, 220, 60, 0.80);
+  stroke-width: 0.18;
+  stroke-linecap: butt;
+}
+/* Railway — alternating black dashes overlaid for the "railroad" map look */
+.boardRailDash {
+  stroke: rgba(10, 5, 0, 0.75);
+  stroke-width: 0.18;
+  stroke-linecap: butt;
+  stroke-dasharray: 0.28 0.28;
+}
+
+#lobbyControls {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .hint {
