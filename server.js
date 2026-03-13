@@ -15,7 +15,14 @@ const app = express();
 app.disable("x-powered-by");
 
 const publicDir = path.join(__dirname, "public");
-app.use(express.static(publicDir));
+app.use(express.static(publicDir, {
+  // Prevent browsers and proxies from serving stale JS/CSS after a deploy.
+  setHeaders(res, filePath) {
+    if (filePath.endsWith(".js") || filePath.endsWith(".css")) {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+  }
+}));
 
 // Always serve the SPA shell; the client JS will assign/generate a room id
 // and update the URL without causing a full reload.
