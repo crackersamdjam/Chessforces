@@ -109,13 +109,13 @@ async function run() {
   // Phase should advance to placement once everyone is ready (occupiedSeats>1).
   await Promise.all(players.map((p) => expectText(p.page, "#phaseLine", /Phase:\s*placement/)));
 
-  // Each player places at least one piece in a valid cell of their home zone.
-  // N: rows 0-4 cols 5-9 | E: rows 5-9 cols 10-14 | S: rows 10-14 cols 5-9 | W: rows 5-9 cols 0-4
+  // Each player places at least one piece in a valid post cell of their home zone.
+  // N: rows 0-5 cols 6-10 | E: rows 6-10 cols 11-16 | S: rows 11-16 cols 6-10 | W: rows 6-10 cols 0-5
   const placements = [
-    { r: 2, c: 5 },  // N home
-    { r: 7, c: 10 }, // E home
-    { r: 12, c: 5 }, // S home
-    { r: 7, c: 0 }   // W home
+    { r: 2,  c: 6  }, // N home (post cell)
+    { r: 8,  c: 11 }, // E home (post cell, avoids camps at rows 7/9)
+    { r: 12, c: 6  }, // S home (post cell, avoids camps at rows 13/15)
+    { r: 8,  c: 0  }  // W home (post cell, avoids HQ at rows 7/9)
   ];
   for (let i = 0; i < players.length; i++) {
     await selectFirstPiece(players[i].page);

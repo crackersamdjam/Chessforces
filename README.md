@@ -27,7 +27,6 @@ Share the room URL with friends. Up to 4 players can join.
 - Play phase:
   - Select one of your pieces
   - Click an adjacent cell to move
-  - Captures reveal pieces; capturing a **炸弹** removes both
 
 ## Notes
 

@@ -264,9 +264,9 @@ function formatSideCoord(piece) {
   const sideMap = { N: "A", E: "B", S: "C", W: "D" };
   const side = sideMap[piece.ownerSeat];
   if (!side) return "";
-  // Center of the 15×15 cross board.
-  const centerR = 7;
-  const centerC = 7;
+  // Center of the 17×17 cross board.
+  const centerR = 8;
+  const centerC = 8;
   const dx = piece.pos.c - centerC;
   const dy = piece.pos.r - centerR; // down is positive
 
@@ -318,10 +318,7 @@ function renderPieces(state) {
     const posText = p.pos ? `@ ${p.pos.r},${p.pos.c}` : "(unplaced)";
     btn.innerHTML = `
       <div style="font-weight:650;">${escapeHtml(p.label)}</div>
-      <div class="pieceMeta">
-        <div>${posText}</div>
-        <div>${p.revealed ? "revealed" : "hidden"}</div>
-      </div>
+      <div class="pieceMeta"><div>${posText}</div></div>
     `;
     btn.addEventListener("click", () => {
       selectedPieceId = selectedPieceId === p.id ? null : p.id;
@@ -338,12 +335,9 @@ function isMineSeat(state, ownerSeat) {
 }
 
 function isProbablyMine(state, piece) {
-  // If label is visible to us, it's either ours or revealed enemy.
-  // Treat as ours if not revealed OR ownerSeat matches our seat when present.
   const me = state.players.find((p) => p.id === app.playerId);
   if (!me?.seat) return false;
-  if (piece.ownerSeat && piece.ownerSeat === me.seat) return true;
-  return piece.ownerSeat === null && piece.revealed === false; // during seating transitions, ownerSeat may be null
+  return piece.ownerSeat === me.seat;
 }
 
 function onCellClick(pos) {
@@ -386,10 +380,10 @@ function addChatLine({ from, text, at }) {
 
 // Home zone info mirrored from server homeInfoForSeat (must stay in sync).
 const HOME_ZONES = {
-  N: { minR: 0,  maxR: 4,  minC: 5,  maxC: 9,  orientation: "row", frontRow: 4,  mineRows: [0, 1],   hqRow: 0,  hqCols: [6, 8] },
-  S: { minR: 10, maxR: 14, minC: 5,  maxC: 9,  orientation: "row", frontRow: 10, mineRows: [13, 14], hqRow: 14, hqCols: [6, 8] },
-  W: { minR: 5,  maxR: 9,  minC: 0,  maxC: 4,  orientation: "col", frontCol: 4,  mineCols: [0, 1],   hqCol: 0,  hqRows: [6, 8] },
-  E: { minR: 5,  maxR: 9,  minC: 10, maxC: 14, orientation: "col", frontCol: 10, mineCols: [13, 14], hqCol: 14, hqRows: [6, 8] }
+  N: { minR: 0,  maxR: 5,  minC: 6,  maxC: 10, orientation: "row", frontRow: 5,  mineRows: [0, 1],   hqRow: 0,  hqCols: [7, 9] },
+  S: { minR: 11, maxR: 16, minC: 6,  maxC: 10, orientation: "row", frontRow: 11, mineRows: [15, 16], hqRow: 16, hqCols: [7, 9] },
+  W: { minR: 6,  maxR: 10, minC: 0,  maxC: 5,  orientation: "col", frontCol: 5,  mineCols: [0, 1],   hqCol: 0,  hqRows: [7, 9] },
+  E: { minR: 6,  maxR: 10, minC: 11, maxC: 16, orientation: "col", frontCol: 11, mineCols: [15, 16], hqCol: 16, hqRows: [7, 9] }
 };
 
 function randomizePlacement() {
@@ -434,22 +428,23 @@ function randomizePlacement() {
       cell.type !== "inactive"
   );
   const postCells = allHomeCells.filter((cell) => cell.type === "post");
+  const hqCells   = allHomeCells.filter((cell) => cell.type === "hq");
 
   let flagCells, mineCells, bombCells, normalCells;
   if (zone.orientation === "row") {
-    flagCells  = allHomeCells.filter(
-      (cell) => cell.type === "hq" && cell.r === zone.hqRow && zone.hqCols.includes(cell.c)
-    );
-    mineCells  = postCells.filter((cell) => zone.mineRows.includes(cell.r));
-    bombCells  = postCells.filter((cell) => cell.r !== zone.frontRow);
-    normalCells = postCells.filter((cell) => cell.r !== zone.frontRow);
+    // Flag: must go on the designated HQ cells.
+    flagCells   = hqCells.filter((cell) => cell.r === zone.hqRow && zone.hqCols.includes(cell.c));
+    // Mines: must stay in the back 2 rows (post cells only — no HQ/camp).
+    mineCells   = postCells.filter((cell) => zone.mineRows.includes(cell.r));
+    // Bombs: any post or HQ cell except the front row.
+    bombCells   = [...postCells, ...hqCells].filter((cell) => cell.r !== zone.frontRow);
+    // Normal officers/engineers: any post or HQ cell (including the front row).
+    normalCells = [...postCells, ...hqCells];
   } else {
-    flagCells  = allHomeCells.filter(
-      (cell) => cell.type === "hq" && cell.c === zone.hqCol && zone.hqRows.includes(cell.r)
-    );
-    mineCells  = postCells.filter((cell) => zone.mineCols.includes(cell.c));
-    bombCells  = postCells.filter((cell) => cell.c !== zone.frontCol);
-    normalCells = postCells.filter((cell) => cell.c !== zone.frontCol);
+    flagCells   = hqCells.filter((cell) => cell.c === zone.hqCol && zone.hqRows.includes(cell.r));
+    mineCells   = postCells.filter((cell) => zone.mineCols.includes(cell.c));
+    bombCells   = [...postCells, ...hqCells].filter((cell) => cell.c !== zone.frontCol);
+    normalCells = [...postCells, ...hqCells];
   }
 
   // Place flag first, then mines, then bombs, then officers/engineers.
@@ -485,10 +480,13 @@ function randomizePlacement() {
   setTimeout(() => setHint(""), 1400);
 }
 
+// Track which seat we've already auto-placed for, so we only do it once.
+let autoPlacedSeat = null;
+
 const socket = new WebSocket(wsUrl);
 
 socket.addEventListener("open", () => {
-  setHint("Pick a seat, set ready, then place at least 1 piece to start.");
+  setHint("Pick a seat and click Ready — pieces will be placed automatically.");
   render();
 });
 
@@ -516,6 +514,14 @@ socket.addEventListener("message", (ev) => {
     // If selected piece got removed (bomb), clear selection.
     if (selectedPieceId && app.state && !app.state.pieces.some((p) => p.id === selectedPieceId)) {
       selectedPieceId = null;
+    }
+    // Auto-randomize placement once when the placement phase begins for this player.
+    if (msg.state.phase === "placement") {
+      const me = msg.state.players.find((p) => p.id === app.playerId);
+      if (me?.seat && me.seat !== autoPlacedSeat) {
+        autoPlacedSeat = me.seat;
+        setTimeout(() => randomizePlacement(), 150);
+      }
     }
     render();
     return;

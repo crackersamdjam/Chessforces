@@ -59,27 +59,28 @@ const PIECE_DEFS = [
 
 /**
  * Create a 4-player cross-shaped (+ shape) Luzhanqi-style board:
- * - 15 rows × 15 cols (square)
- * - Active cells: vertical bar (cols 5-9, all rows) UNION horizontal bar (rows 5-9, all cols)
- * - Inactive corner cells (5×5 each) keep the cross shape
- * - Each player has a fully exclusive 5×5 home zone (no overlap with the center):
- *     N: rows 0-4,   cols 5-9   (front = row 4,  back = row 0)
- *     S: rows 10-14, cols 5-9   (front = row 10, back = row 14)
- *     W: rows 5-9,   cols 0-4   (front = col 4,  back = col 0)
- *     E: rows 5-9,   cols 10-14 (front = col 10, back = col 14)
- * - Center (rows 5-9, cols 5-9) is shared battle territory — not part of any home zone
+ * - 17 rows × 17 cols (square)
+ * - Active cells: vertical bar (cols 6-10, all rows) UNION horizontal bar (rows 6-10, all cols)
+ * - Inactive corner cells (6×6 each) keep the cross shape
+ * - Each player has a fully exclusive 6×5 (or 5×6) home zone — 30 cells, 24 post + 4 camp + 2 HQ:
+ *     N: rows 0-5,   cols 6-10  (front = row 5,  back = row 0)
+ *     S: rows 11-16, cols 6-10  (front = row 11, back = row 16)
+ *     W: rows 6-10,  cols 0-5   (front = col 5,  back = col 0)
+ *     E: rows 6-10,  cols 11-16 (front = col 11, back = col 16)
+ * - Center (rows 6-10, cols 6-10) is shared battle territory — not part of any home zone
+ * - 30 cells per arm gives exactly 24 post cells for 24 non-flag pieces + 2 HQ (1 for flag)
  */
 function createBoard() {
-  const rows = 15;
-  const cols = 15;
+  const rows = 17;
+  const cols = 17;
   /** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"|"inactive"}[]}} */
   // @ts-ignore
   const board = { rows, cols, cells: [] };
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      // Cross (+ shape): vertical bar (cols 5-9) union horizontal bar (rows 5-9).
-      const active = (c >= 5 && c <= 9) || (r >= 5 && r <= 9);
+      // Cross (+ shape): vertical bar (cols 6-10) union horizontal bar (rows 6-10).
+      const active = (c >= 6 && c <= 10) || (r >= 6 && r <= 10);
       board.cells.push({ r, c, type: active ? "post" : "inactive" });
     }
   }
@@ -92,25 +93,31 @@ function createBoard() {
     cell.type = type;
   }
 
-  // N home (rows 0-4, cols 5-9): HQ at back (row 0), camps at rows 1 and 3.
-  mark(0, 6, "hq");  mark(0, 8, "hq");
-  mark(1, 6, "camp"); mark(1, 8, "camp");
-  mark(3, 6, "camp"); mark(3, 8, "camp");
+  // N home (rows 0-5, cols 6-10): HQ at back (row 0); 5 camps in plum-blossom pattern at rows 2-4.
+  // Layout (row 0=back, row 5=front):  row2: C·C  row3: ·C·  row4: C·C
+  mark(0, 7, "hq");  mark(0, 9, "hq");
+  mark(2, 7, "camp"); mark(2, 9, "camp");
+  mark(3, 8, "camp"); // centre camp
+  mark(4, 7, "camp"); mark(4, 9, "camp");
 
-  // S home (rows 10-14, cols 5-9): HQ at back (row 14), camps at rows 11 and 13.
-  mark(14, 6, "hq"); mark(14, 8, "hq");
-  mark(13, 6, "camp"); mark(13, 8, "camp");
-  mark(11, 6, "camp"); mark(11, 8, "camp");
+  // S home (rows 11-16, cols 6-10): HQ at back (row 16); camps at rows 12-14 (mirrored).
+  mark(16, 7, "hq"); mark(16, 9, "hq");
+  mark(12, 7, "camp"); mark(12, 9, "camp");
+  mark(13, 8, "camp"); // centre camp
+  mark(14, 7, "camp"); mark(14, 9, "camp");
 
-  // W home (rows 5-9, cols 0-4): HQ at back (col 0), camps at cols 1 and 3.
-  mark(6, 0, "hq");  mark(8, 0, "hq");
-  mark(6, 1, "camp"); mark(8, 1, "camp");
-  mark(6, 3, "camp"); mark(8, 3, "camp");
+  // W home (rows 6-10, cols 0-5): HQ at back (col 0); 5 camps at cols 2-4 (rotated pattern).
+  // Layout (col 0=back, col 5=front):  col2: C·C  col3: ·C·  col4: C·C
+  mark(7, 0, "hq");  mark(9, 0, "hq");
+  mark(7, 2, "camp"); mark(9, 2, "camp");
+  mark(8, 3, "camp"); // centre camp
+  mark(7, 4, "camp"); mark(9, 4, "camp");
 
-  // E home (rows 5-9, cols 10-14): HQ at back (col 14), camps at cols 13 and 11.
-  mark(6, 14, "hq"); mark(8, 14, "hq");
-  mark(6, 13, "camp"); mark(8, 13, "camp");
-  mark(6, 11, "camp"); mark(8, 11, "camp");
+  // E home (rows 6-10, cols 11-16): HQ at back (col 16); camps at cols 12-14 (mirrored).
+  mark(7, 16, "hq"); mark(9, 16, "hq");
+  mark(7, 12, "camp"); mark(9, 12, "camp");
+  mark(8, 13, "camp"); // centre camp
+  mark(7, 14, "camp"); mark(9, 14, "camp");
 
   return board;
 }
@@ -156,15 +163,14 @@ function roomSnapshotFor(room, viewerId) {
   }
 
   const pieces = [];
-  // Pieces: each piece is hidden to non-owner unless revealed.
+  // Pieces: label is only visible to the owner — never revealed to opponents.
   for (const piece of room.pieces.values()) {
     const isOwner = piece.ownerId === viewerId;
     pieces.push({
       id: piece.id,
       ownerSeat: room.players.get(piece.ownerId)?.seat ?? null,
       pos: piece.pos,
-      revealed: piece.revealed,
-      label: isOwner || piece.revealed ? piece.label : "?"
+      label: isOwner ? piece.label : "?"
     });
   }
 
@@ -191,9 +197,9 @@ function getOrCreateRoom(roomId) {
       phase: PHASES.LOBBY,
       players: new Map(), // playerId -> {ws, name, seat, ready, joinedAt}
       seatToPlayerId: new Map(), // seat -> playerId
-      // 15 rows × 15 cols cross-shaped board with typed cells (兵站 / 行营 / 大本营).
+      // 17 rows × 17 cols cross-shaped board with typed cells (兵站 / 行营 / 大本营).
       board: createBoard(),
-      pieces: new Map(), // pieceId -> {id, ownerId, type, label, rank, pos:{r,c}|null, revealed:boolean, alive:boolean}
+      pieces: new Map(), // pieceId -> {id, ownerId, type, label, rank, pos:{r,c}|null, alive:boolean}
       turnSeat: null,
       lastMove: null,
       winnerSeat: null,
@@ -288,7 +294,6 @@ function ensurePieceSet(room, playerId) {
         label: def.label,
         rank: def.rank,
         pos: null,
-        revealed: false,
         alive: true
       });
     }
@@ -296,49 +301,49 @@ function ensurePieceSet(room, playerId) {
 }
 
 /**
- * Returns placement-constraint info for each seat's 5×5 home zone.
- * N/S are "row-oriented" (the arm extends vertically).
- * W/E are "col-oriented" (the arm extends horizontally).
+ * Returns placement-constraint info for each seat's home zone.
+ * N/S are "row-oriented" (the arm extends vertically, 6 rows × 5 cols = 30 cells).
+ * W/E are "col-oriented" (the arm extends horizontally, 5 rows × 6 cols = 30 cells).
  *
  * Home zones (exclusive — no overlap with center or other arms):
- *   N: rows 0-4,   cols 5-9   (center starts at row 5)
- *   S: rows 10-14, cols 5-9   (center ends  at row 9)
- *   W: rows 5-9,   cols 0-4   (center starts at col 5)
- *   E: rows 5-9,   cols 10-14 (center ends  at col 9)
+ *   N: rows 0-5,   cols 6-10  (center starts at row 6)
+ *   S: rows 11-16, cols 6-10  (center ends  at row 10)
+ *   W: rows 6-10,  cols 0-5   (center starts at col 6)
+ *   E: rows 6-10,  cols 11-16 (center ends  at col 10)
  */
 function homeInfoForSeat(board, seat) {
   switch (seat) {
     case "N":
       return {
-        minR: 0,  maxR: 4,  minC: 5,  maxC: 9,
+        minR: 0,  maxR: 5,  minC: 6,  maxC: 10,
         orientation: "row",
-        frontRow: 4,          // row closest to center (bombs not allowed here)
+        frontRow: 5,          // row closest to center (bombs not allowed here)
         mineRows: [0, 1],     // back 2 rows (mines must be here)
-        hqRow: 0, hqCols: [6, 8]
+        hqRow: 0, hqCols: [7, 9]
       };
     case "S":
       return {
-        minR: 10, maxR: 14, minC: 5,  maxC: 9,
+        minR: 11, maxR: 16, minC: 6,  maxC: 10,
         orientation: "row",
-        frontRow: 10,
-        mineRows: [13, 14],
-        hqRow: 14, hqCols: [6, 8]
+        frontRow: 11,
+        mineRows: [15, 16],
+        hqRow: 16, hqCols: [7, 9]
       };
     case "W":
       return {
-        minR: 5,  maxR: 9,  minC: 0,  maxC: 4,
+        minR: 6,  maxR: 10, minC: 0,  maxC: 5,
         orientation: "col",
-        frontCol: 4,          // col closest to center
+        frontCol: 5,          // col closest to center
         mineCols: [0, 1],     // back 2 cols
-        hqCol: 0, hqRows: [6, 8]
+        hqCol: 0, hqRows: [7, 9]
       };
     case "E":
       return {
-        minR: 5,  maxR: 9,  minC: 10, maxC: 14,
+        minR: 6,  maxR: 10, minC: 11, maxC: 16,
         orientation: "col",
-        frontCol: 10,
-        mineCols: [13, 14],
-        hqCol: 14, hqRows: [6, 8]
+        frontCol: 11,
+        mineCols: [15, 16],
+        hqCol: 16, hqRows: [7, 9]
       };
     default:
       return null;
@@ -381,17 +386,14 @@ function validatePlacement(room, piece, player) {
   }
 
   if (piece.type === "flag") {
+    // Flag must be placed on an HQ cell.
     if (!isHQCell(room.board, player.seat, pos)) return false;
-  } else {
-    if (cell.type === "hq") return false;
   }
+  // Non-flag pieces may occupy any non-camp, in-bounds cell including the second HQ.
   return true;
 }
 
 function resolveCapture(attacker, defender) {
-  attacker.revealed = true;
-  defender.revealed = true;
-
   // Flag captured: attacker wins, defender removed.
   if (defender.type === "flag") {
     defender.alive = false;
