@@ -237,7 +237,7 @@ body {
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
-  background: url("/board-4p.png") center/contain no-repeat, radial-gradient(circle at 50% 50%, #111827, #020617);
+  background: radial-gradient(circle at 50% 50%, #111827, #020617);
 }
 .cell {
   border-right: 1px solid rgba(255, 255, 255, 0.06);
