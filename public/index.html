@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Online 军棋 (Simple)</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="title">Online 军棋</div>
+          <div class="subtitle">Simple 4-player link game</div>
+        </div>
+        <div class="room">
+          <div class="roomline">
+            <span class="muted">Room</span>
+            <span id="roomId" class="mono"></span>
+          </div>
+          <button id="copyLinkBtn" class="btn">Copy link</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel">
+          <div class="panelHeader">
+            <div>
+              <div class="panelTitle">Lobby</div>
+              <div id="phaseLine" class="panelSubtitle muted"></div>
+            </div>
+          </div>
+
+          <div class="row gap">
+            <label class="field">
+              <div class="label muted">Name</div>
+              <input id="nameInput" class="input" maxlength="24" placeholder="Your name" />
+            </label>
+            <button id="saveNameBtn" class="btn">Save</button>
+          </div>
+
+          <div class="seats">
+            <div class="seatHeader muted">Seats (max 4)</div>
+            <div id="seatsGrid" class="seatsGrid"></div>
+          </div>
+
+          <div class="row gap">
+            <button id="readyBtn" class="btn primary" disabled>Ready</button>
+            <button id="unreadyBtn" class="btn" disabled>Not ready</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="panelTitle">Chat</div>
+          <div id="chatLog" class="chatLog"></div>
+          <div class="row gap">
+            <input id="chatInput" class="input" placeholder="Say something…" maxlength="300" />
+            <button id="sendChatBtn" class="btn">Send</button>
+          </div>
+        </section>
+
+        <section class="boardWrap">
+          <div class="boardHeader">
+            <div class="panelTitle">Board</div>
+            <div id="turnLine" class="muted"></div>
+          </div>
+          <div id="board" class="board"></div>
+          <div id="hint" class="hint muted"></div>
+          <div class="legend muted">
+            Simple rules: place pieces in placement phase, then take turns moving 1 step. Captures reveal pieces; bombs remove both. (Not full 军棋 rules.)
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panelHeader">
+            <div>
+              <div class="panelTitle">Your pieces</div>
+              <div class="panelSubtitle muted">Click a piece then click a cell to place/move</div>
+            </div>
+          </div>
+          <div id="piecesList" class="piecesList"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/client.js"></script>
+  </body>
+</html>
+
