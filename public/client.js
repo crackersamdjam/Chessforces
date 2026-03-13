@@ -308,6 +308,7 @@ function render() {
 
   ensureSeatViews();
   ensureBoardViews(state);
+  applyPerspective(state);
 
   renderSeats(state);
   renderBoard(state);
@@ -462,6 +463,17 @@ function renderPieces(state) {
     });
     list.appendChild(btn);
   }
+}
+
+function applyPerspective(state) {
+  const boardEl = $("board");
+  if (!boardEl) return;
+  boardEl.classList.remove("board--rotN", "board--rotE", "board--rotW");
+  const me = state?.players.find(p => p.id === app.playerId);
+  const seat = me?.seat;
+  if (seat === "N") boardEl.classList.add("board--rotN");
+  else if (seat === "E") boardEl.classList.add("board--rotE");
+  else if (seat === "W") boardEl.classList.add("board--rotW");
 }
 
 function isMineSeat(state, ownerSeat) {
