@@ -725,7 +725,10 @@ wss.on("connection", (ws, req) => {
       const seat = String(msg.seat ?? "");
       if (!SEATS.includes(seat)) return;
       if (room.seatToPlayerId.has(seat)) return;
-      if (player.seat) room.seatToPlayerId.delete(player.seat);
+      if (player.seat) {
+        room.seatToPlayerId.delete(player.seat);
+        player.ready = false; // switching seats resets ready state
+      }
       player.seat = seat;
       room.seatToPlayerId.set(seat, playerId);
       ensurePieceSet(room, playerId);
