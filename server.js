@@ -170,7 +170,8 @@ function roomSnapshotFor(room, viewerId) {
       id: piece.id,
       ownerSeat: room.players.get(piece.ownerId)?.seat ?? null,
       pos: piece.pos,
-      label: isOwner ? piece.label : "?"
+      label: isOwner ? piece.label : "?",
+      type: isOwner ? piece.type : null
     });
   }
 

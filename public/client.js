@@ -325,7 +325,14 @@ function renderPieces(state) {
     `;
     btn.addEventListener("click", () => {
       selectedPieceId = selectedPieceId === p.id ? null : p.id;
-      setHint(selectedPieceId ? "Now click a cell to place/move." : "");
+      if (selectedPieceId) {
+        const ph = state.phase;
+        setHint(ph === "play"
+          ? "Click a destination cell to move."
+          : "Click a cell to place, or another piece to swap.");
+      } else {
+        setHint("");
+      }
       render();
     });
     list.appendChild(btn);
@@ -343,20 +350,133 @@ function isMyPiece(state, piece) {
   return piece.ownerSeat === me.seat;
 }
 
+// Client-side placement validation mirroring server validatePlacement.
+function canPlaceAt(state, piece, pos) {
+  if (!pos) return true; // unplace always ok
+  const zone = HOME_ZONES[piece.ownerSeat];
+  if (!zone) return false;
+  if (pos.r < zone.minR || pos.r > zone.maxR || pos.c < zone.minC || pos.c > zone.maxC) return false;
+  const cell = state.board.cells.find((c) => c.r === pos.r && c.c === pos.c);
+  if (!cell || cell.type === "inactive" || cell.type === "camp") return false;
+  if (piece.type === "flag") {
+    if (cell.type !== "hq") return false;
+    return zone.orientation === "row"
+      ? pos.r === zone.hqRow && zone.hqCols.includes(pos.c)
+      : pos.c === zone.hqCol && zone.hqRows.includes(pos.r);
+  }
+  if (piece.type === "mine") {
+    if (cell.type !== "post") return false;
+    return zone.orientation === "row"
+      ? zone.mineRows.includes(pos.r)
+      : zone.mineCols.includes(pos.c);
+  }
+  if (piece.type === "bomb") {
+    return zone.orientation === "row"
+      ? pos.r !== zone.frontRow
+      : pos.c !== zone.frontCol;
+  }
+  return true;
+}
+
 function onCellClick(pos) {
   const state = app.state;
-  if (!state || !selectedPieceId) return;
+  if (!state) return;
 
+  const clickedPiece = state.pieces.find(
+    (p) => p.pos && p.pos.r === pos.r && p.pos.c === pos.c && p.alive !== false
+  ) ?? null;
+  const clickedIsMine = clickedPiece !== null && isMyPiece(state, clickedPiece);
+
+  // ── LOBBY / PLACEMENT ──────────────────────────────────────────────
   if (state.phase === "lobby" || state.phase === "placement") {
+    if (!selectedPieceId) {
+      // Click a placed own piece to select it.
+      if (clickedIsMine) {
+        selectedPieceId = clickedPiece.id;
+        setHint("Click a cell to move, or another piece to swap.");
+        render();
+      }
+      return;
+    }
+
+    // A piece is already selected.
+    const selPiece = state.pieces.find((p) => p.id === selectedPieceId) ?? null;
+
+    // Clicking the same piece → deselect.
+    if (clickedPiece?.id === selectedPieceId) {
+      selectedPieceId = null;
+      setHint("");
+      render();
+      return;
+    }
+
+    // Clicking another own placed piece → attempt swap.
+    if (clickedIsMine && clickedPiece.pos && selPiece) {
+      const fromPos = selPiece.pos;  // may be null if selPiece is unplaced
+      const toPos   = clickedPiece.pos;
+      if (fromPos && !canPlaceAt(state, selPiece, toPos)) {
+        setHint("⚠ Invalid swap: that position isn't legal for this piece.");
+        setTimeout(() => setHint(""), 1800);
+        selectedPieceId = null;
+        render();
+        return;
+      }
+      if (fromPos && !canPlaceAt(state, clickedPiece, fromPos)) {
+        setHint("⚠ Invalid swap: that position isn't legal for the other piece.");
+        setTimeout(() => setHint(""), 1800);
+        selectedPieceId = null;
+        render();
+        return;
+      }
+      // 3-step swap so the server never sees two pieces on the same cell.
+      send({ type: "place_piece", pieceId: selectedPieceId, pos: null });
+      if (fromPos) send({ type: "place_piece", pieceId: clickedPiece.id, pos: fromPos });
+      send({ type: "place_piece", pieceId: selectedPieceId, pos: toPos });
+      selectedPieceId = null;
+      setHint("");
+      render();
+      return;
+    }
+
+    // Clicking an empty cell (or an unplaced piece slot) → place selected piece there.
     send({ type: "place_piece", pieceId: selectedPieceId, pos });
+    selectedPieceId = null;
     setHint("");
     return;
   }
 
+  // ── PLAY ───────────────────────────────────────────────────────────
   if (state.phase === "play") {
+    if (!selectedPieceId) {
+      // Click own piece on board to select it.
+      if (clickedIsMine) {
+        selectedPieceId = clickedPiece.id;
+        setHint("Click a destination cell to move.");
+        render();
+      }
+      return;
+    }
+
+    // Click the already-selected piece → deselect.
+    if (clickedPiece?.id === selectedPieceId) {
+      selectedPieceId = null;
+      setHint("");
+      render();
+      return;
+    }
+
+    // Click a different own piece → re-select it.
+    if (clickedIsMine) {
+      selectedPieceId = clickedPiece.id;
+      setHint("Click a destination cell to move.");
+      render();
+      return;
+    }
+
+    // Click any other cell → attempt move.
     send({ type: "move", pieceId: selectedPieceId, to: pos });
+    selectedPieceId = null;
     setHint("");
-    return;
   }
 }
 
@@ -410,12 +530,18 @@ function randomizePlacement() {
   const zone = HOME_ZONES[me.seat];
   if (!zone) return;
 
+  // Unplace all of my currently placed pieces so the server accepts re-placement.
+  for (const p of pieces) {
+    if (p.pos) send({ type: "place_piece", pieceId: p.id, pos: null });
+  }
+
   const { cells } = state.board;
 
   function posKey(p) { return `${p.r},${p.c}`; }
 
+  // Only treat OTHER players' pieces as occupied — my own will be cleared by the messages above.
   const occupied = new Set(
-    state.pieces.filter((p) => p.pos).map((p) => posKey(p.pos))
+    state.pieces.filter((p) => p.pos && !isMyPiece(state, p)).map((p) => posKey(p.pos))
   );
 
   function randomChoice(arr) {
