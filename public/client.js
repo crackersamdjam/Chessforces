@@ -342,6 +342,8 @@ function renderSeats(state) {
     view.statusEl.textContent = occupied ? (p.ready ? "Ready" : "Not ready") : "—";
     view.statusEl.classList.toggle("ready", !!p?.ready);
 
+    const gameActive = state.phase === "play" || state.phase === "done";
+    view.btn.style.display = gameActive ? "none" : "";
     if (!occupied) {
       view.btn.disabled = false;
       view.btn.classList.add("primary");

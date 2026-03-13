@@ -721,6 +721,7 @@ wss.on("connection", (ws, req) => {
     }
 
     if (msg.type === "take_seat") {
+      if (room.phase === PHASES.PLAY || room.phase === PHASES.DONE) return;
       const seat = String(msg.seat ?? "");
       if (!SEATS.includes(seat)) return;
       if (room.seatToPlayerId.has(seat)) return;
@@ -736,6 +737,7 @@ wss.on("connection", (ws, req) => {
     }
 
     if (msg.type === "leave_seat") {
+      if (room.phase === PHASES.PLAY || room.phase === PHASES.DONE) return;
       if (player.seat) room.seatToPlayerId.delete(player.seat);
       player.seat = null;
       player.ready = false;
