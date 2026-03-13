@@ -43,18 +43,18 @@ const PHASES = /** @type {const} */ ({
 // Full Junqi-style piece set (2‑side version, reused per seat).
 // We keep the standard ranks and special pieces but still allow up to 4 seats on one board.
 const PIECE_DEFS = [
-  { type: "marshal", label: "司令(9)", rank: 9, count: 1 },
-  { type: "general", label: "军长(8)", rank: 8, count: 1 },
-  { type: "major_general", label: "师长(7)", rank: 7, count: 2 },
-  { type: "brigadier", label: "旅长(6)", rank: 6, count: 2 },
-  { type: "colonel", label: "团长(5)", rank: 5, count: 2 },
-  { type: "major", label: "营长(4)", rank: 4, count: 2 },
-  { type: "captain", label: "连长(3)", rank: 3, count: 3 },
-  { type: "lieutenant", label: "排长(2)", rank: 2, count: 3 },
-  { type: "engineer", label: "工兵(1)", rank: 1, count: 3 },
-  { type: "bomb", label: "炸弹(0)", rank: null, count: 2 },
-  { type: "mine", label: "地雷(10)", rank: null, count: 3 },
-  { type: "flag", label: "军旗(11)", rank: null, count: 1 }
+  { type: "marshal", label: "司令(40)", rank: 9, count: 1 },
+  { type: "general", label: "军长(39)", rank: 8, count: 1 },
+  { type: "major_general", label: "师长(38)", rank: 7, count: 2 },
+  { type: "brigadier", label: "旅长(37)", rank: 6, count: 2 },
+  { type: "colonel", label: "团长(36)", rank: 5, count: 2 },
+  { type: "major", label: "营长(35)", rank: 4, count: 2 },
+  { type: "captain", label: "连长(34)", rank: 3, count: 3 },
+  { type: "lieutenant", label: "排长(33)", rank: 2, count: 3 },
+  { type: "engineer", label: "工兵(32)", rank: 1, count: 3 },
+  { type: "bomb", label: "炸弹(B)", rank: null, count: 2 },
+  { type: "mine", label: "地雷(M)", rank: null, count: 3 },
+  { type: "flag", label: "军旗(F)", rank: null, count: 1 }
 ];
 
 /**
@@ -217,37 +217,38 @@ function chooseSeat(room) {
   return null;
 }
 
+function broadcastState(room) {
+  for (const [pid, p] of room.players) {
+    safeSend(p.ws, { type: "state", state: roomSnapshotFor(room, pid) });
+  }
+}
+
+function allPiecesPlaced(room, playerId) {
+  const mine = Array.from(room.pieces.values()).filter((pc) => pc.ownerId === playerId);
+  return mine.length > 0 && mine.every((pc) => pc.pos !== null);
+}
+
 function maybeAdvancePhase(room) {
-  const occupiedSeats = Array.from(room.seatToPlayerId.keys()).length;
-  const allReady =
-    occupiedSeats > 1 &&
-    Array.from(room.players.values()).every((p) => p.seat && p.ready);
+  // Placement now happens in the lobby phase before declaring ready.
+  // The game starts (LOBBY → PLAY) once every seated player is ready
+  // AND has placed all their pieces.
+  if (room.phase !== PHASES.LOBBY) return;
 
-  if (room.phase === PHASES.LOBBY && allReady) {
-    room.phase = PHASES.PLACEMENT;
-    room.updatedAt = nowMs();
-    room.winnerSeat = null;
-    room.gameOverReason = null;
-    broadcast(room, { type: "phase", phase: room.phase });
-  }
+  const seatedPlayers = Array.from(room.players.values()).filter((p) => p.seat);
+  if (seatedPlayers.length < 2) return;
 
-  if (room.phase === PHASES.PLACEMENT) {
-    // In this simple version: placement is "done" when each seated player has at least 1 placed piece.
-    const seatedPlayers = Array.from(room.players.values()).filter((p) => p.seat);
-    const allPlaced = seatedPlayers.every((p) => {
-      for (const piece of room.pieces.values()) {
-        if (piece.ownerId === p.id && piece.pos) return true;
-      }
-      return false;
-    });
-    if (allPlaced) {
-      room.phase = PHASES.PLAY;
-      // Start turn at N then clockwise among occupied seats.
-      room.turnSeat = SEATS.find((s) => room.seatToPlayerId.has(s)) ?? null;
-      room.updatedAt = nowMs();
-      broadcast(room, { type: "phase", phase: room.phase, turnSeat: room.turnSeat });
-    }
-  }
+  const allReady = seatedPlayers.every((p) => p.ready);
+  if (!allReady) return;
+
+  const allPlaced = seatedPlayers.every((p) => allPiecesPlaced(room, p.id));
+  if (!allPlaced) return;
+
+  room.phase = PHASES.PLAY;
+  room.turnSeat = SEATS.find((s) => room.seatToPlayerId.has(s)) ?? null;
+  room.updatedAt = nowMs();
+  room.winnerSeat = null;
+  room.gameOverReason = null;
+  broadcastState(room);
 }
 
 function nextOccupiedSeat(room, fromSeat) {
@@ -553,8 +554,10 @@ wss.on("connection", (ws, req) => {
     }
 
     if (msg.type === "set_ready") {
-      player.ready = Boolean(msg.ready);
-      broadcast(room, { type: "presence" });
+      const wantsReady = Boolean(msg.ready);
+      // Prevent readying up until every piece has been placed.
+      if (wantsReady && !allPiecesPlaced(room, playerId)) return;
+      player.ready = wantsReady;
       for (const [pid, p] of room.players) {
         safeSend(p.ws, { type: "state", state: roomSnapshotFor(room, pid) });
       }
@@ -563,7 +566,7 @@ wss.on("connection", (ws, req) => {
     }
 
     if (msg.type === "place_piece") {
-      if (room.phase !== PHASES.PLACEMENT && room.phase !== PHASES.LOBBY) return;
+      if (room.phase !== PHASES.LOBBY) return;
       if (!player.seat) return;
       const pieceId = String(msg.pieceId ?? "");
       const pos = msg.pos ?? null;

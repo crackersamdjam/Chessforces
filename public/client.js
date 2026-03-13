@@ -196,7 +196,10 @@ function render() {
   renderPieces(state);
 
   const me = state.players.find((p) => p.id === app.playerId) || null;
-  $("readyBtn").disabled = !me || !me.seat || me.ready;
+  const myPieces = state.pieces.filter((p) => isMyPiece(state, p));
+  const allMyPiecesPlaced =
+    myPieces.length > 0 && myPieces.every((p) => p.pos !== null);
+  $("readyBtn").disabled = !me || !me.seat || me.ready || !allMyPiecesPlaced;
   $("unreadyBtn").disabled = !me || !me.seat || !me.ready;
 }
 
@@ -300,7 +303,7 @@ function renderPieces(state) {
 
   // If you haven't taken a seat yet, you won't have an ownerSeat; instead infer from hidden state:
   // We show "your pieces" by matching the pieces labeled (server already hides others).
-  const mine = state.pieces.filter((p) => p.label !== "?" && isProbablyMine(state, p));
+  const mine = state.pieces.filter((p) => p.label !== "?" && isMyPiece(state, p));
   const pieces = mine.sort((a, b) => a.label.localeCompare(b.label, "zh"));
 
   if (!pieces.length) {
@@ -334,7 +337,7 @@ function isMineSeat(state, ownerSeat) {
   return Boolean(me && me.seat === ownerSeat);
 }
 
-function isProbablyMine(state, piece) {
+function isMyPiece(state, piece) {
   const me = state.players.find((p) => p.id === app.playerId);
   if (!me?.seat) return false;
   return piece.ownerSeat === me.seat;
@@ -389,8 +392,8 @@ const HOME_ZONES = {
 function randomizePlacement() {
   const state = app.state;
   if (!state) return;
-  if (state.phase !== "lobby" && state.phase !== "placement") {
-    setHint("You can only randomize at the start.");
+  if (state.phase !== "lobby") {
+    setHint("Pieces can only be moved before the game starts.");
     setTimeout(() => setHint(""), 1400);
     return;
   }
@@ -401,7 +404,7 @@ function randomizePlacement() {
     return;
   }
 
-  const pieces = state.pieces.filter((p) => p.label !== "?" && isProbablyMine(state, p));
+  const pieces = state.pieces.filter((p) => p.label !== "?" && isMyPiece(state, p));
   if (!pieces.length) return;
 
   const zone = HOME_ZONES[me.seat];
@@ -486,7 +489,7 @@ let autoPlacedSeat = null;
 const socket = new WebSocket(wsUrl);
 
 socket.addEventListener("open", () => {
-  setHint("Pick a seat and click Ready — pieces will be placed automatically.");
+  setHint("Pick a seat — pieces will be placed automatically. Click Ready when done.");
   render();
 });
 
@@ -510,18 +513,23 @@ socket.addEventListener("message", (ev) => {
     return;
   }
   if (msg.type === "state") {
+    const prevPhase = app.state?.phase;
     app.state = msg.state;
     // If selected piece got removed (bomb), clear selection.
-    if (selectedPieceId && app.state && !app.state.pieces.some((p) => p.id === selectedPieceId)) {
+    if (selectedPieceId && !app.state.pieces.some((p) => p.id === selectedPieceId)) {
       selectedPieceId = null;
     }
-    // Auto-randomize placement once when the placement phase begins for this player.
-    if (msg.state.phase === "placement") {
+    // Auto-randomize as soon as the player takes a seat in the lobby.
+    if (msg.state.phase === "lobby") {
       const me = msg.state.players.find((p) => p.id === app.playerId);
       if (me?.seat && me.seat !== autoPlacedSeat) {
         autoPlacedSeat = me.seat;
         setTimeout(() => randomizePlacement(), 150);
       }
+    }
+    // Show hint on phase transitions.
+    if (prevPhase !== msg.state.phase) {
+      if (msg.state.phase === "play") setHint("Game started. Select one of your pieces and move.");
     }
     render();
     return;
@@ -531,6 +539,7 @@ socket.addEventListener("message", (ev) => {
     return;
   }
   if (msg.type === "phase") {
+    // Legacy handler kept for forward-compatibility; server now sends state instead.
     if (msg.phase === "play") setHint("Game started. Select one of your pieces and move.");
     render();
     return;

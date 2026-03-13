@@ -30,22 +30,21 @@ async function setName(page, name) {
   await page.locator("#saveNameBtn").click();
 }
 
+async function waitForReadyEnabled(page, timeout = 30_000) {
+  // Auto-placement fires after taking a seat; wait until all 25 pieces are placed
+  // so the Ready button becomes enabled.
+  await page.waitForFunction(
+    () => {
+      const btn = document.querySelector("#readyBtn");
+      return btn !== null && !btn.disabled;
+    },
+    { timeout }
+  );
+}
+
 async function setReady(page) {
-  const btn = page.locator("#readyBtn");
-  await btn.waitFor({ timeout: 10_000 });
-  await btn.click();
-}
-
-async function selectFirstPiece(page) {
-  const pieceBtn = page.locator(".pieceBtn").first();
-  await pieceBtn.waitFor({ timeout: 10_000 });
-  await pieceBtn.click();
-}
-
-async function placeAt(page, r, c) {
-  const cell = page.locator(`.cell[data-r="${r}"][data-c="${c}"]`);
-  await cell.waitFor({ timeout: 10_000 });
-  await cell.click();
+  await waitForReadyEnabled(page);
+  await page.locator("#readyBtn").click();
 }
 
 async function sendChat(page, text) {
@@ -103,27 +102,12 @@ async function run() {
     await clickSeat(players[i].page, seats[i]);
   }
 
-  // Ready up
+  // Auto-placement fires when each player takes their seat.
+  // Wait until all pieces are placed (Ready button enabled), then ready up.
   for (const p of players) await setReady(p.page);
 
-  // Phase should advance to placement once everyone is ready (occupiedSeats>1).
-  await Promise.all(players.map((p) => expectText(p.page, "#phaseLine", /Phase:\s*placement/)));
-
-  // Each player places at least one piece in a valid post cell of their home zone.
-  // N: rows 0-5 cols 6-10 | E: rows 6-10 cols 11-16 | S: rows 11-16 cols 6-10 | W: rows 6-10 cols 0-5
-  const placements = [
-    { r: 2,  c: 6  }, // N home (post cell)
-    { r: 8,  c: 11 }, // E home (post cell, avoids camps at rows 7/9)
-    { r: 12, c: 6  }, // S home (post cell, avoids camps at rows 13/15)
-    { r: 8,  c: 0  }  // W home (post cell, avoids HQ at rows 7/9)
-  ];
-  for (let i = 0; i < players.length; i++) {
-    await selectFirstPiece(players[i].page);
-    await placeAt(players[i].page, placements[i].r, placements[i].c);
-  }
-
-  // Phase should advance to play; turn line should show.
-  await Promise.all(players.map((p) => expectText(p.page, "#phaseLine", /Phase:\s*play/)));
+  // Phase should advance to play once everyone is ready (goes LOBBY → PLAY directly).
+  await Promise.all(players.map((p) => expectText(p.page, "#phaseLine", /Phase:\s*play/, 20_000)));
   await Promise.all(players.map((p) => expectText(p.page, "#turnLine", /Turn:\s*/)));
 
   // Chat send/receive
