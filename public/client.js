@@ -131,12 +131,21 @@ function ensureBoardViews(state) {
   if (!boardEl || boardViews.size || !state?.board) return;
   const { rows, cols, cells } = state.board;
   boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  boardEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
   boardEl.innerHTML = "";
 
   for (const cellDef of cells) {
     const { r, c, type } = cellDef;
     const cell = document.createElement("div");
     const key = `${r},${c}`;
+
+    if (type === "inactive") {
+      cell.className = "cell cell--inactive";
+      boardEl.appendChild(cell);
+      // Inactive cells are invisible grid placeholders — not added to boardViews.
+      continue;
+    }
+
     cell.className = "cell";
     cell.classList.add(
       type === "camp" ? "cell--camp" : type === "hq" ? "cell--hq" : "cell--post"
@@ -255,27 +264,28 @@ function formatSideCoord(piece) {
   const sideMap = { N: "A", E: "B", S: "C", W: "D" };
   const side = sideMap[piece.ownerSeat];
   if (!side) return "";
-  const centerR = 5;
-  const centerC = 2;
+  // Center of the 15×15 cross board.
+  const centerR = 7;
+  const centerC = 7;
   const dx = piece.pos.c - centerC;
   const dy = piece.pos.r - centerR; // down is positive
 
   let x = 0;
   let y = 0;
   if (side === "A") {
-    // A at top: y increases away from center toward A's home
+    // N at top: y increases away from center toward N's back
     x = dx;
     y = -dy;
   } else if (side === "C") {
-    // C at bottom
+    // S at bottom
     x = -dx;
     y = dy;
   } else if (side === "B") {
-    // B on right
+    // E on right
     x = dy;
     y = dx;
   } else if (side === "D") {
-    // D on left
+    // W on left
     x = -dy;
     y = -dx;
   }
@@ -374,6 +384,14 @@ function addChatLine({ from, text, at }) {
   log.scrollTop = log.scrollHeight;
 }
 
+// Home zone info mirrored from server homeInfoForSeat (must stay in sync).
+const HOME_ZONES = {
+  N: { minR: 0,  maxR: 4,  minC: 5,  maxC: 9,  orientation: "row", frontRow: 4,  mineRows: [0, 1],   hqRow: 0,  hqCols: [6, 8] },
+  S: { minR: 10, maxR: 14, minC: 5,  maxC: 9,  orientation: "row", frontRow: 10, mineRows: [13, 14], hqRow: 14, hqCols: [6, 8] },
+  W: { minR: 5,  maxR: 9,  minC: 0,  maxC: 4,  orientation: "col", frontCol: 4,  mineCols: [0, 1],   hqCol: 0,  hqRows: [6, 8] },
+  E: { minR: 5,  maxR: 9,  minC: 10, maxC: 14, orientation: "col", frontCol: 10, mineCols: [13, 14], hqCol: 14, hqRows: [6, 8] }
+};
+
 function randomizePlacement() {
   const state = app.state;
   if (!state) return;
@@ -389,28 +407,18 @@ function randomizePlacement() {
     return;
   }
 
-  // Use our visible (unhidden to us) pieces as "ours".
   const pieces = state.pieces.filter((p) => p.label !== "?" && isProbablyMine(state, p));
   if (!pieces.length) return;
 
-  const { rows, cols, cells } = state.board;
+  const zone = HOME_ZONES[me.seat];
+  if (!zone) return;
 
-  // Helper to compute home‑side placement regions that respect Junqi constraints.
-  const halfRows = rows / 2;
-  const topSide = me.seat === "N" || me.seat === "W";
-  const frontRow = topSide ? 0 : rows - 1;
-  const lastTwoRows = topSide ? [halfRows - 2, halfRows - 1] : [rows - 2, rows - 1];
-  const hqRow = topSide ? halfRows - 1 : halfRows;
-  const hqCols = [1, 3];
+  const { cells } = state.board;
 
-  function posKey(p) {
-    return `${p.r},${p.c}`;
-  }
+  function posKey(p) { return `${p.r},${p.c}`; }
 
   const occupied = new Set(
-    state.pieces
-      .filter((p) => p.pos)
-      .map((p) => posKey(p.pos))
+    state.pieces.filter((p) => p.pos).map((p) => posKey(p.pos))
   );
 
   function randomChoice(arr) {
@@ -418,18 +426,33 @@ function randomizePlacement() {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  // Build candidate slots for different piece types, using board cell types.
-  const allHomeCells = cells.filter((cell) =>
-    topSide ? cell.r >= 0 && cell.r < halfRows : cell.r >= halfRows && cell.r < rows
+  // Filter to home zone active cells only.
+  const allHomeCells = cells.filter(
+    (cell) =>
+      cell.r >= zone.minR && cell.r <= zone.maxR &&
+      cell.c >= zone.minC && cell.c <= zone.maxC &&
+      cell.type !== "inactive"
   );
-
   const postCells = allHomeCells.filter((cell) => cell.type === "post");
-  const mineCells = postCells.filter((cell) => lastTwoRows.includes(cell.r));
-  const flagCells = allHomeCells.filter(
-    (cell) => cell.type === "hq" && cell.r === hqRow && hqCols.includes(cell.c)
-  );
 
-  // Place flag first, then mines, then bombs, then others.
+  let flagCells, mineCells, bombCells, normalCells;
+  if (zone.orientation === "row") {
+    flagCells  = allHomeCells.filter(
+      (cell) => cell.type === "hq" && cell.r === zone.hqRow && zone.hqCols.includes(cell.c)
+    );
+    mineCells  = postCells.filter((cell) => zone.mineRows.includes(cell.r));
+    bombCells  = postCells.filter((cell) => cell.r !== zone.frontRow);
+    normalCells = postCells.filter((cell) => cell.r !== zone.frontRow);
+  } else {
+    flagCells  = allHomeCells.filter(
+      (cell) => cell.type === "hq" && cell.c === zone.hqCol && zone.hqRows.includes(cell.r)
+    );
+    mineCells  = postCells.filter((cell) => zone.mineCols.includes(cell.c));
+    bombCells  = postCells.filter((cell) => cell.c !== zone.frontCol);
+    normalCells = postCells.filter((cell) => cell.c !== zone.frontCol);
+  }
+
+  // Place flag first, then mines, then bombs, then officers/engineers.
   const ordered = [
     ...pieces.filter((p) => p.label.startsWith("军旗")),
     ...pieces.filter((p) => p.label.startsWith("地雷")),
@@ -446,7 +469,7 @@ function randomizePlacement() {
     } else if (piece.label.startsWith("地雷")) {
       candidates = mineCells;
     } else if (piece.label.startsWith("炸弹")) {
-      candidates = normalCells.filter((p) => p.r !== frontRow);
+      candidates = bombCells;
     } else {
       candidates = normalCells;
     }

@@ -58,50 +58,59 @@ const PIECE_DEFS = [
 ];
 
 /**
- * Create a simplified Luzhanqi-style board:
- * - 12 rows x 5 cols
- * - Mark a few cells as 行营 (camp) and 大本营 (HQ)
- * - All other traversable cells are 兵站 (post)
+ * Create a 4-player cross-shaped (+ shape) Luzhanqi-style board:
+ * - 15 rows × 15 cols (square)
+ * - Active cells: vertical bar (cols 5-9, all rows) UNION horizontal bar (rows 5-9, all cols)
+ * - Inactive corner cells (5×5 each) keep the cross shape
+ * - Each player has a fully exclusive 5×5 home zone (no overlap with the center):
+ *     N: rows 0-4,   cols 5-9   (front = row 4,  back = row 0)
+ *     S: rows 10-14, cols 5-9   (front = row 10, back = row 14)
+ *     W: rows 5-9,   cols 0-4   (front = col 4,  back = col 0)
+ *     E: rows 5-9,   cols 10-14 (front = col 10, back = col 14)
+ * - Center (rows 5-9, cols 5-9) is shared battle territory — not part of any home zone
  */
 function createBoard() {
-  const rows = 12;
-  const cols = 5;
-  /** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"}[]} */
+  const rows = 15;
+  const cols = 15;
+  /** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"|"inactive"}[]}} */
   // @ts-ignore
   const board = { rows, cols, cells: [] };
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      board.cells.push({ r, c, type: "post" });
+      // Cross (+ shape): vertical bar (cols 5-9) union horizontal bar (rows 5-9).
+      const active = (c >= 5 && c <= 9) || (r >= 5 && r <= 9);
+      board.cells.push({ r, c, type: active ? "post" : "inactive" });
     }
   }
 
-  // Helper to set cell type safely.
+  // Helper to set cell type safely (will not overwrite inactive cells).
   function mark(r, c, type) {
     if (r < 0 || r >= rows || c < 0 || c >= cols) return;
-    board.cells[r * cols + c].type = type;
+    const cell = board.cells[r * cols + c];
+    if (cell.type === "inactive") return;
+    cell.type = type;
   }
 
-  // Camps (行营) – approximate a couple of central circular spaces for each side.
-  // Top side camps.
-  mark(1, 1, "camp");
-  mark(1, 3, "camp");
-  mark(3, 1, "camp");
-  mark(3, 3, "camp");
-  // Bottom side camps (mirrored).
-  mark(8, 1, "camp");
-  mark(8, 3, "camp");
-  mark(10, 1, "camp");
-  mark(10, 3, "camp");
+  // N home (rows 0-4, cols 5-9): HQ at back (row 0), camps at rows 1 and 3.
+  mark(0, 6, "hq");  mark(0, 8, "hq");
+  mark(1, 6, "camp"); mark(1, 8, "camp");
+  mark(3, 6, "camp"); mark(3, 8, "camp");
 
-  // Headquarters (大本营) – use the rows already implied by homeInfoForSeat.
-  const halfRows = rows / 2; // 6
-  // Top HQ row (row 5) at cols 1 and 3.
-  mark(halfRows - 1, 1, "hq");
-  mark(halfRows - 1, 3, "hq");
-  // Bottom HQ row (row 6) at cols 1 and 3.
-  mark(halfRows, 1, "hq");
-  mark(halfRows, 3, "hq");
+  // S home (rows 10-14, cols 5-9): HQ at back (row 14), camps at rows 11 and 13.
+  mark(14, 6, "hq"); mark(14, 8, "hq");
+  mark(13, 6, "camp"); mark(13, 8, "camp");
+  mark(11, 6, "camp"); mark(11, 8, "camp");
+
+  // W home (rows 5-9, cols 0-4): HQ at back (col 0), camps at cols 1 and 3.
+  mark(6, 0, "hq");  mark(8, 0, "hq");
+  mark(6, 1, "camp"); mark(8, 1, "camp");
+  mark(6, 3, "camp"); mark(8, 3, "camp");
+
+  // E home (rows 5-9, cols 10-14): HQ at back (col 14), camps at cols 13 and 11.
+  mark(6, 14, "hq"); mark(8, 14, "hq");
+  mark(6, 13, "camp"); mark(8, 13, "camp");
+  mark(6, 11, "camp"); mark(8, 11, "camp");
 
   return board;
 }
@@ -182,7 +191,7 @@ function getOrCreateRoom(roomId) {
       phase: PHASES.LOBBY,
       players: new Map(), // playerId -> {ws, name, seat, ready, joinedAt}
       seatToPlayerId: new Map(), // seat -> playerId
-      // 12 rows x 5 cols with typed cells (兵站 / 行营 / 大本营).
+      // 15 rows × 15 cols cross-shaped board with typed cells (兵站 / 行营 / 大本营).
       board: createBoard(),
       pieces: new Map(), // pieceId -> {id, ownerId, type, label, rank, pos:{r,c}|null, revealed:boolean, alive:boolean}
       turnSeat: null,
@@ -246,14 +255,16 @@ function nextOccupiedSeat(room, fromSeat) {
 
 function isInBounds(board, pos) {
   if (!pos) return false;
-  return (
-    Number.isInteger(pos.r) &&
-    Number.isInteger(pos.c) &&
-    pos.r >= 0 &&
-    pos.r < board.rows &&
-    pos.c >= 0 &&
-    pos.c < board.cols
-  );
+  if (
+    !Number.isInteger(pos.r) ||
+    !Number.isInteger(pos.c) ||
+    pos.r < 0 ||
+    pos.r >= board.rows ||
+    pos.c < 0 ||
+    pos.c >= board.cols
+  ) return false;
+  const cell = boardCellAt(board, pos);
+  return !!cell && cell.type !== "inactive";
 }
 
 function pieceAt(room, pos) {
@@ -284,35 +295,65 @@ function ensurePieceSet(room, playerId) {
   }
 }
 
+/**
+ * Returns placement-constraint info for each seat's 5×5 home zone.
+ * N/S are "row-oriented" (the arm extends vertically).
+ * W/E are "col-oriented" (the arm extends horizontally).
+ *
+ * Home zones (exclusive — no overlap with center or other arms):
+ *   N: rows 0-4,   cols 5-9   (center starts at row 5)
+ *   S: rows 10-14, cols 5-9   (center ends  at row 9)
+ *   W: rows 5-9,   cols 0-4   (center starts at col 5)
+ *   E: rows 5-9,   cols 10-14 (center ends  at col 9)
+ */
 function homeInfoForSeat(board, seat) {
-  // We split board into a top half (rows 0‑5) and bottom half (rows 6‑11).
-  // Seats N/W use the top, S/E use the bottom.
-  const top = seat === "N" || seat === "W";
-  const halfRows = board.rows / 2; // 6
-  if (top) {
-    return {
-      // rows 0..5
-      frontRow: 0,
-      lastTwoRows: [halfRows - 2, halfRows - 1], // 4,5
-      hqRow: halfRows - 1, // 5
-      hqCols: [1, 3]
-    };
+  switch (seat) {
+    case "N":
+      return {
+        minR: 0,  maxR: 4,  minC: 5,  maxC: 9,
+        orientation: "row",
+        frontRow: 4,          // row closest to center (bombs not allowed here)
+        mineRows: [0, 1],     // back 2 rows (mines must be here)
+        hqRow: 0, hqCols: [6, 8]
+      };
+    case "S":
+      return {
+        minR: 10, maxR: 14, minC: 5,  maxC: 9,
+        orientation: "row",
+        frontRow: 10,
+        mineRows: [13, 14],
+        hqRow: 14, hqCols: [6, 8]
+      };
+    case "W":
+      return {
+        minR: 5,  maxR: 9,  minC: 0,  maxC: 4,
+        orientation: "col",
+        frontCol: 4,          // col closest to center
+        mineCols: [0, 1],     // back 2 cols
+        hqCol: 0, hqRows: [6, 8]
+      };
+    case "E":
+      return {
+        minR: 5,  maxR: 9,  minC: 10, maxC: 14,
+        orientation: "col",
+        frontCol: 10,
+        mineCols: [13, 14],
+        hqCol: 14, hqRows: [6, 8]
+      };
+    default:
+      return null;
   }
-  // bottom side
-  return {
-    // rows 6..11
-    frontRow: board.rows - 1,
-    lastTwoRows: [board.rows - 2, board.rows - 1], // 10,11
-    hqRow: halfRows, // 6
-    hqCols: [1, 3]
-  };
 }
 
 function isHQCell(board, seat, pos) {
   const info = homeInfoForSeat(board, seat);
-  if (pos.r !== info.hqRow || !info.hqCols.includes(pos.c)) return false;
+  if (!info) return false;
   const cell = boardCellAt(board, pos);
-  return !!cell && cell.type === "hq";
+  if (!cell || cell.type !== "hq") return false;
+  if (info.orientation === "row") {
+    return pos.r === info.hqRow && info.hqCols.includes(pos.c);
+  }
+  return pos.c === info.hqCol && info.hqRows.includes(pos.r);
 }
 
 function validatePlacement(room, piece, player) {
@@ -320,33 +361,28 @@ function validatePlacement(room, piece, player) {
   const pos = piece.pos;
   if (!pos) return true;
   const info = homeInfoForSeat(room.board, player.seat);
+  if (!info) return false;
 
-  // Only allow setup inside own half of the board.
-  if (player.seat === "N" || player.seat === "W") {
-    if (pos.r < 0 || pos.r >= room.board.rows / 2) return false;
-  } else {
-    if (pos.r < room.board.rows / 2 || pos.r >= room.board.rows) return false;
-  }
+  // Must be within own home zone bounding box.
+  if (pos.r < info.minR || pos.r > info.maxR || pos.c < info.minC || pos.c > info.maxC) return false;
 
   const cell = boardCellAt(room.board, pos);
-  if (!cell) return false;
+  if (!cell || cell.type === "inactive") return false;
 
-  // Do not allow initial placement on 行营.
+  // No initial placement on 行营 (camp).
   if (cell.type === "camp") return false;
 
-  if (piece.type === "bomb") {
-    // Bombs cannot be in the front row.
-    if (pos.r === info.frontRow) return false;
+  if (info.orientation === "row") {
+    if (piece.type === "bomb" && pos.r === info.frontRow) return false;
+    if (piece.type === "mine" && !info.mineRows.includes(pos.r)) return false;
+  } else {
+    if (piece.type === "bomb" && pos.c === info.frontCol) return false;
+    if (piece.type === "mine" && !info.mineCols.includes(pos.c)) return false;
   }
-  if (piece.type === "mine") {
-    // Mines must be in the last two rows.
-    if (!info.lastTwoRows.includes(pos.r)) return false;
-  }
+
   if (piece.type === "flag") {
-    // Flag must be in one of the HQ cells.
     if (!isHQCell(room.board, player.seat, pos)) return false;
   } else {
-    // Non-flag pieces cannot start in HQ.
     if (cell.type === "hq") return false;
   }
   return true;
