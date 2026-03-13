@@ -269,6 +269,21 @@ body {
   border: 2px solid rgba(255, 255, 255, 0.6);
 }
 
+.cell--mountain {
+  background: rgba(90, 60, 25, 0.28);
+  border: 1px solid rgba(130, 90, 40, 0.55) !important;
+  cursor: pointer;
+}
+.mountainLabel {
+  font-size: 0.40em;
+  color: rgba(140, 95, 40, 0.85);
+  font-weight: bold;
+  text-align: center;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
 .cell--hq {
   background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), rgba(0, 0, 0, 0.3));
   border: 1px solid rgba(124, 58, 237, 0.8);

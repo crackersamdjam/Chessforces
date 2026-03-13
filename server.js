@@ -73,7 +73,7 @@ const PIECE_DEFS = [
 function createBoard() {
   const rows = 17;
   const cols = 17;
-  /** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"|"inactive"}[], railEdges:[{r:number,c:number},{r:number,c:number}][]}} */
+  /** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"|"inactive"|"railonly"|"mountain"}[], railEdges:[{r:number,c:number},{r:number,c:number}][]}} */
   // @ts-ignore
   const board = { rows, cols, cells: [] };
 
@@ -118,6 +118,15 @@ function createBoard() {
   mark(7, 12, "camp"); mark(9, 12, "camp");
   mark(8, 13, "camp"); // centre camp
   mark(7, 14, "camp"); mark(9, 14, "camp");
+
+  // Center railway-only pass-through nodes — pieces cannot stop here.
+  for (const [r, c] of [[6,7],[7,6],[6,9],[7,8],[7,10],[9,6],[9,8],[9,10],[10,7],[10,9],[8,7],[8,9]]) {
+    mark(r, c, "railonly");
+  }
+  // Mountain zones (山界) — only engineers (工兵) may enter.
+  for (const [r, c] of [[7,7],[7,9],[9,7],[9,9]]) {
+    mark(r, c, "mountain");
+  }
 
   // ── Railway edge topology ──────────────────────────────────────────────────
   // Layout (same structure for each arm, described for N; others are symmetric):
@@ -304,15 +313,42 @@ function getRailAdj(room) {
 function isValidRailwayMove(room, piece, from, to) {
   const adj = getRailAdj(room);
   const startKey = `${from.r},${from.c}`;
-  if (!adj.has(startKey)) return false; // source not on railway
-  const toKey = `${to.r},${to.c}`;
+  const toKey   = `${to.r},${to.c}`;
+  const ORTHO = [[0,1],[0,-1],[1,0],[-1,0]];
 
   if (piece.type === "engineer") {
-    // BFS: can turn at any junction, blocked by any piece on intermediate cells.
-    const visited = new Set([startKey]);
-    const queue = [from];
+    // Engineers use full BFS on the railway and may additionally:
+    //   • Enter a mountain cell (山界) by stepping off the rail in one final
+    //     orthogonal step from any railway node adjacent to the mountain.
+    //   • Exit a mountain cell by first stepping onto any adjacent railway node
+    //     that is not blocked, then continuing normally on the rail.
+    const fromCell = boardCellAt(room.board, from);
+    const visited = new Set();
+    const queue = [];
+
+    if (fromCell?.type === "mountain") {
+      // Piece is starting on a mountain: seed the BFS with all adjacent
+      // unblocked railway cells (the "exit step" off the mountain).
+      visited.add(startKey);
+      for (const [dr, dc] of ORTHO) {
+        const nr = from.r + dr, nc = from.c + dc;
+        const nk = `${nr},${nc}`;
+        if (!adj.has(nk)) continue;           // not on railway
+        if (pieceAt(room, {r: nr, c: nc})) continue; // blocked
+        if (visited.has(nk)) continue;
+        visited.add(nk);
+        if (nk === toKey) return true;
+        queue.push({r: nr, c: nc});
+      }
+    } else {
+      if (!adj.has(startKey)) return false;   // source not on railway
+      visited.add(startKey);
+      queue.push(from);
+    }
+
     while (queue.length > 0) {
       const cur = queue.shift();
+      // Standard railway BFS expansion.
       for (const next of (adj.get(`${cur.r},${cur.c}`) ?? [])) {
         const nk = `${next.r},${next.c}`;
         if (visited.has(nk)) continue;
@@ -321,9 +357,20 @@ function isValidRailwayMove(room, piece, from, to) {
         if (pieceAt(room, next)) continue; // blocked
         queue.push(next);
       }
+      // One-step exit from railway onto an adjacent mountain cell.
+      for (const [dr, dc] of ORTHO) {
+        const mr = cur.r + dr, mc = cur.c + dc;
+        if (`${mr},${mc}` !== toKey) continue;
+        const destCell = boardCellAt(room.board, {r: mr, c: mc});
+        if (destCell?.type === "mountain") return true;
+      }
     }
     return false;
   }
+
+  // Non-engineers cannot start on or reach mountain cells, so the early guard
+  // is still valid for them.
+  if (!adj.has(startKey)) return false;
 
   // ── Non-engineer: DFS with direction tracking ─────────────────────────────
   // Two distinct rules depending on edge type:
@@ -553,6 +600,16 @@ function resolveCapture(attacker, defender) {
     defender.alive = false;
     defender.pos = null;
     return { result: "flag", attackerId: attacker.id, defenderId: defender.id };
+    // TODO: may need additional eliminatePlayer logic
+  }
+  
+  // Bomb interaction.
+  if (attacker.type === "bomb" || defender.type === "bomb") {
+    attacker.alive = false;
+    defender.alive = false;
+    attacker.pos = null;
+    defender.pos = null;
+    return { result: "both", attackerId: attacker.id, defenderId: defender.id };
   }
 
   // Landmine interaction.
@@ -561,24 +618,12 @@ function resolveCapture(attacker, defender) {
       // Engineer safely clears the mine.
       defender.alive = false;
       defender.pos = null;
-      return { result: "mine_cleared", attackerId: attacker.id, defenderId: defender.id };
+      return { result: "attacker", attackerId: attacker.id, defenderId: defender.id };
     }
-    // Non‑engineers die on the mine; optional rule: mine also removed.
+    // Non‑engineers die on the mine; mines are not removed.
     attacker.alive = false;
     attacker.pos = null;
-    // Common fast‑play rule: mine removed too.
-    defender.alive = false;
-    defender.pos = null;
-    return { result: "mine_both", attackerId: attacker.id, defenderId: defender.id };
-  }
-
-  // Bomb interaction.
-  if (attacker.type === "bomb" || defender.type === "bomb") {
-    attacker.alive = false;
-    defender.alive = false;
-    attacker.pos = null;
-    defender.pos = null;
-    return { result: "bomb_both", attackerId: attacker.id, defenderId: defender.id };
+    return { result: "defender", attackerId: attacker.id, defenderId: defender.id };
   }
 
   // Normal rank comparison for officers/engineers.
@@ -601,12 +646,7 @@ function resolveCapture(attacker, defender) {
     return { result: "both", attackerId: attacker.id, defenderId: defender.id };
   }
 
-  // Fallback: treat as both removed.
-  attacker.alive = false;
-  defender.alive = false;
-  attacker.pos = null;
-  defender.pos = null;
-  return { result: "both", attackerId: attacker.id, defenderId: defender.id };
+  assert(false, "Invalid combat resolution");
 }
 
 function checkForWin(room) {
@@ -758,6 +798,11 @@ wss.on("connection", (ws, req) => {
       const dr = Math.abs(to.r - from.r), dc = Math.abs(to.c - from.c);
       const isRoadMove = dr + dc === 1;
       if (!isRoadMove && !isValidRailwayMove(room, piece, from, to)) return;
+
+      // Destination cell restrictions.
+      const toCell = boardCellAt(room.board, to);
+      if (toCell?.type === "railonly") return; // rail pass-through only, no landing
+      if (toCell?.type === "mountain" && piece.type !== "engineer") return; // 山界: engineers only
 
       const target = pieceAt(room, to);
       if (target && target.ownerId === playerId) return; // can't capture own piece

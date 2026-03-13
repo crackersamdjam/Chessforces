@@ -175,8 +175,15 @@ function ensureBoardViews(state) {
     svg.appendChild(p);
   }
 
-  // Pre-build sets for fast lookup
-  const activeKeys = new Set(cells.filter(c => c.type !== "inactive").map(c => `${c.r},${c.c}`));
+  // Pre-build sets for fast lookup.
+  // roadKeys: cells that participate in the visible road network.
+  // Railonly cells are railway pass-throughs (no pieces, no road lines).
+  // Mountain cells are shown but have no visible roads leading to them.
+  const roadKeys = new Set(
+    cells
+      .filter(c => c.type !== "inactive" && c.type !== "railonly" && c.type !== "mountain")
+      .map(c => `${c.r},${c.c}`)
+  );
   const railSet = new Set();
   for (const [a, b] of (railEdges ?? [])) {
     const k = a.r < b.r || (a.r === b.r && a.c <= b.c)
@@ -188,18 +195,33 @@ function ensureBoardViews(state) {
       ? `${r1},${c1},${r2},${c2}` : `${r2},${c2},${r1},${c1}`;
   }
 
-  // Draw road lines (non-railway adjacencies first, then railway on top)
-  for (const { r, c, type } of cells) {
-    if (type === "inactive") continue;
+  // Draw orthogonal road lines (non-railway adjacencies between road-network cells).
+  for (const { r, c } of cells) {
+    if (!roadKeys.has(`${r},${c}`)) continue;
     // right neighbour
-    if (activeKeys.has(`${r},${c + 1}`)) {
+    if (roadKeys.has(`${r},${c + 1}`)) {
       const k = edgeKey(r, c, r, c + 1);
       if (!railSet.has(k)) svgLine(c + 0.5, r + 0.5, c + 1.5, r + 0.5, "boardRoad");
     }
     // bottom neighbour
-    if (activeKeys.has(`${r + 1},${c}`)) {
+    if (roadKeys.has(`${r + 1},${c}`)) {
       const k = edgeKey(r, c, r + 1, c);
       if (!railSet.has(k)) svgLine(c + 0.5, r + 0.5, c + 0.5, r + 1.5, "boardRoad");
+    }
+  }
+  // Draw diagonal roads for camp cells (行营 have 4 diagonal connections).
+  // Deduplicated so each edge is drawn once.
+  const campDiagSet = new Set();
+  for (const { r, c, type } of cells) {
+    if (type !== "camp") continue;
+    for (const [dr, dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
+      const nr = r + dr, nc = c + dc;
+      if (!roadKeys.has(`${nr},${nc}`)) continue;
+      const ek = r < nr || (r === nr && c < nc)
+        ? `${r},${c},${nr},${nc}` : `${nr},${nc},${r},${c}`;
+      if (campDiagSet.has(ek)) continue;
+      campDiagSet.add(ek);
+      svgLine(c + 0.5, r + 0.5, nc + 0.5, nr + 0.5, "boardRoad");
     }
   }
   // Draw railway lines (two-layer: golden base + black dashes).
@@ -219,10 +241,26 @@ function ensureBoardViews(state) {
     const cell = document.createElement("div");
     const key = `${r},${c}`;
 
-    if (type === "inactive") {
+    // Inactive and rail-only cells are transparent grid placeholders (no pieces, no clicks).
+    if (type === "inactive" || type === "railonly") {
       cell.className = "cell cell--inactive";
       boardEl.appendChild(cell);
-      // Inactive cells are invisible grid placeholders — not added to boardViews.
+      continue;
+    }
+
+    // Mountain cells (山界): labelled, clickable, but no visible road lines.
+    if (type === "mountain") {
+      cell.className = "cell cell--mountain";
+      const lbl = document.createElement("div");
+      lbl.className = "mountainLabel";
+      lbl.textContent = "山界";
+      cell.appendChild(lbl);
+      const tokenHost = document.createElement("div");
+      tokenHost.className = "cellTokenHost";
+      cell.appendChild(tokenHost);
+      cell.addEventListener("click", () => onCellClick({ r, c }));
+      boardEl.appendChild(cell);
+      boardViews.set(key, { cell, tokenHost });
       continue;
     }
 
@@ -562,6 +600,7 @@ function onCellClick(pos) {
     send({ type: "move", pieceId: selectedPieceId, to: pos });
     selectedPieceId = null;
     setHint("");
+    render(); // deselect immediately; server will re-render on valid move
   }
 }
 
