@@ -394,12 +394,14 @@ body {
   stroke: rgba(255, 220, 60, 0.80);
   stroke-width: 0.18;
   stroke-linecap: butt;
+  fill: none;
 }
 /* Railway — alternating black dashes overlaid for the "railroad" map look */
 .boardRailDash {
   stroke: rgba(10, 5, 0, 0.75);
   stroke-width: 0.18;
   stroke-linecap: butt;
+  fill: none;
   stroke-dasharray: 0.28 0.28;
 }
 

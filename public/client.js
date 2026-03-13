@@ -149,6 +149,32 @@ function ensureBoardViews(state) {
     svg.appendChild(l);
   }
 
+  // Quarter-circle arc for diagonal connector edges.
+  // The arc curves toward the OUTER corner of the arm junction (away from
+  // the board centre), making it visually obvious that the connector only
+  // flows "with the grain" from deep inside an arm.
+  function svgArc(x1, y1, x2, y2, cls) {
+    // Recover grid coords from SVG cell-centre coords (x = c+0.5, y = r+0.5).
+    const r1 = y1 - 0.5, c1 = x1 - 0.5;
+    const r2 = y2 - 0.5, c2 = x2 - 0.5;
+    // The arc is centred at the OUTER corner (the candidate cell that lies
+    // OUTSIDE the central 5×5 zone), so the curve bows away from the board
+    // centre — like a real railway track curving around the outside of a bend.
+    // Candidate corners are (r2,c1) and (r1,c2); the inner one sits in [6,10]².
+    let icr, icc;
+    if (r2 >= 6 && r2 <= 10 && c1 >= 6 && c1 <= 10) { icr = r1; icc = c2; } // outer
+    else                                               { icr = r2; icc = c1; } // outer
+    const cx = icc + 0.5, cy = icr + 0.5;
+    // Cross product (P1−C)×(P2−C) determines sweep direction so the arc
+    // always curves through the outer corner of the junction.
+    const cross = (x1 - cx) * (y2 - cy) - (y1 - cy) * (x2 - cx);
+    const sweep = cross > 0 ? 1 : 0;
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", `M ${x1} ${y1} A 1 1 0 0 ${sweep} ${x2} ${y2}`);
+    p.setAttribute("class", cls);
+    svg.appendChild(p);
+  }
+
   // Pre-build sets for fast lookup
   const activeKeys = new Set(cells.filter(c => c.type !== "inactive").map(c => `${c.r},${c.c}`));
   const railSet = new Set();
@@ -176,11 +202,15 @@ function ensureBoardViews(state) {
       if (!railSet.has(k)) svgLine(c + 0.5, r + 0.5, c + 0.5, r + 1.5, "boardRoad");
     }
   }
-  // Draw railway lines (two-layer: golden base + black dashes)
+  // Draw railway lines (two-layer: golden base + black dashes).
+  // Diagonal connector edges are drawn as quarter-circle arcs so the curve
+  // makes it clear which direction the branch naturally flows.
   for (const [a, b] of (railEdges ?? [])) {
     const x1 = a.c + 0.5, y1 = a.r + 0.5, x2 = b.c + 0.5, y2 = b.r + 0.5;
-    svgLine(x1, y1, x2, y2, "boardRailBase");
-    svgLine(x1, y1, x2, y2, "boardRailDash");
+    const isDiag = Math.abs(a.r - b.r) === 1 && Math.abs(a.c - b.c) === 1;
+    const draw = isDiag ? svgArc : svgLine;
+    draw(x1, y1, x2, y2, "boardRailBase");
+    draw(x1, y1, x2, y2, "boardRailDash");
   }
   // ────────────────────────────────────────────────────────────────────────
 

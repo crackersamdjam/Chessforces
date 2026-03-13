@@ -326,26 +326,38 @@ function isValidRailwayMove(room, piece, from, to) {
   }
 
   // ── Non-engineer: DFS with direction tracking ─────────────────────────────
-  // At every step the new edge direction must have a strictly positive dot
-  // product with the current travel direction — no turns ≥ 90°.
-  // This single rule handles both straight rail travel and diagonal connector
-  // transitions naturally:
-  //   • Straight continuation  (1,0)→(1,0):   dot = 1  ✓
-  //   • Diagonal entered "with the grain", e.g. (1,0)→(1,−1): dot = 1  ✓
-  //   • Diagonal entered against the grain,  (−1,0)→(1,−1): dot = −1  ✗
-  //   • 90° turn at any regular junction     (1,0)→(0,1):  dot = 0  ✗
-  // (dr=0, dc=0 represents the initial "no direction yet" state.)
+  // Two distinct rules depending on edge type:
+  //
+  // Regular (orthogonal) edges — no turns allowed:
+  //   dot product of new direction with current direction must be > 0.
+  //   (any direction is allowed on the very first step, dr=dc=0)
+  //
+  // Diagonal connector edges — usable only from "deep within a side":
+  //   the cell we arrived FROM, (r−dr, c−dc), must satisfy
+  //   prevR < 5 || prevC < 5 || prevR > 11 || prevC > 11
+  //   i.e. it must be outside the 6×6 center band, meaning the piece is
+  //   genuinely travelling along an arm rail toward the corner junction.
+  //   This prevents shortcuts like (5,9)→(5,10)→diagonal(6,11).
+  //   On the first step dr=dc=0 the "prev" resolves to the piece's own cell,
+  //   which is never deep, so diagonal-as-first-step is correctly blocked.
 
   const visited = new Set();
 
   function dfs(r, c, dr, dc) {
+    const isFirstStep = dr === 0 && dc === 0;
     for (const next of (adj.get(`${r},${c}`) ?? [])) {
       const ndr = Math.sign(next.r - r);
       const ndc = Math.sign(next.c - c);
+      const isDiag = (ndr !== 0 && ndc !== 0);
 
-      // No sharp turns: dot product with current direction must be > 0.
-      // Skip the check entirely on the first step (dr=dc=0).
-      if ((dr !== 0 || dc !== 0) && (dr * ndr + dc * ndc) <= 0) continue;
+      if (isDiag) {
+        // Must be travelling from deep inside an arm.
+        const prevR = r - dr, prevC = c - dc;
+        if (!isFirstStep && !(prevR < 5 || prevC < 5 || prevR > 11 || prevC > 11)) continue;
+      } else {
+        // Straight-line only — no turning at regular junctions.
+        if ((dr !== 0 || dc !== 0) && (dr * ndr + dc * ndc) <= 0) continue;
+      }
 
       const sk = `${next.r},${next.c},${ndr},${ndc}`;
       if (visited.has(sk)) continue;
