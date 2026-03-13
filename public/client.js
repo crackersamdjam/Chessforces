@@ -126,41 +126,37 @@ function ensureSeatViews() {
   }
 }
 
-function ensureBoardViews() {
+function ensureBoardViews(state) {
   const boardEl = $("board");
-  if (!boardEl || boardViews.size) return;
-  // Board is 12x5 in this implementation.
-  const rows = 12;
-  const cols = 5;
+  if (!boardEl || boardViews.size || !state?.board) return;
+  const { rows, cols, cells } = state.board;
   boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   boardEl.innerHTML = "";
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cell = document.createElement("div");
-      cell.className = "cell";
-      const key = `${r},${c}`;
-      cell.dataset.r = String(r);
-      cell.dataset.c = String(c);
+  for (const cellDef of cells) {
+    const { r, c, type } = cellDef;
+    const cell = document.createElement("div");
+    const key = `${r},${c}`;
+    cell.className = "cell";
+    cell.classList.add(
+      type === "camp" ? "cell--camp" : type === "hq" ? "cell--hq" : "cell--post"
+    );
+    cell.dataset.r = String(r);
+    cell.dataset.c = String(c);
 
-      const coord = document.createElement("div");
-      coord.className = "cellCoord";
-      coord.textContent = `${r},${c}`;
-      cell.appendChild(coord);
+    const coord = document.createElement("div");
+    coord.className = "cellCoord";
+    coord.textContent = `${r},${c}`;
+    cell.appendChild(coord);
 
-      const tokenHost = document.createElement("div");
-      tokenHost.style.width = "100%";
-      tokenHost.style.height = "100%";
-      tokenHost.style.display = "flex";
-      tokenHost.style.alignItems = "center";
-      tokenHost.style.justifyContent = "center";
-      cell.appendChild(tokenHost);
+    const tokenHost = document.createElement("div");
+    tokenHost.className = "cellTokenHost";
+    cell.appendChild(tokenHost);
 
-      cell.addEventListener("click", () => onCellClick({ r, c }));
+    cell.addEventListener("click", () => onCellClick({ r, c }));
 
-      boardEl.appendChild(cell);
-      boardViews.set(key, { cell, tokenHost });
-    }
+    boardEl.appendChild(cell);
+    boardViews.set(key, { cell, tokenHost });
   }
 }
 
@@ -184,7 +180,7 @@ function render() {
   }
 
   ensureSeatViews();
-  ensureBoardViews();
+  ensureBoardViews(state);
 
   renderSeats(state);
   renderBoard(state);
@@ -243,12 +239,48 @@ function renderBoard(state) {
     const token = document.createElement("div");
     token.className = "token";
     if (piece.id === selectedPieceId) token.classList.add("selected");
+    const coord = formatSideCoord(piece);
     token.innerHTML = `
       <div class="label">${escapeHtml(piece.label)}</div>
-      <div class="owner">${piece.ownerSeat ?? "?"}</div>
+      <div class="owner">${piece.ownerSeat ?? "?"}${
+        coord ? ` · ${escapeHtml(coord)}` : ""
+      }</div>
     `;
     host.appendChild(token);
   }
+}
+
+function formatSideCoord(piece) {
+  if (!piece.pos || !piece.ownerSeat) return "";
+  const sideMap = { N: "A", E: "B", S: "C", W: "D" };
+  const side = sideMap[piece.ownerSeat];
+  if (!side) return "";
+  const centerR = 5;
+  const centerC = 2;
+  const dx = piece.pos.c - centerC;
+  const dy = piece.pos.r - centerR; // down is positive
+
+  let x = 0;
+  let y = 0;
+  if (side === "A") {
+    // A at top: y increases away from center toward A's home
+    x = dx;
+    y = -dy;
+  } else if (side === "C") {
+    // C at bottom
+    x = -dx;
+    y = dy;
+  } else if (side === "B") {
+    // B on right
+    x = dy;
+    y = dx;
+  } else if (side === "D") {
+    // D on left
+    x = -dy;
+    y = -dx;
+  }
+
+  return `${side}(${x},${y})`;
 }
 
 function renderPieces(state) {
@@ -361,7 +393,7 @@ function randomizePlacement() {
   const pieces = state.pieces.filter((p) => p.label !== "?" && isProbablyMine(state, p));
   if (!pieces.length) return;
 
-  const { rows, cols } = state.board;
+  const { rows, cols, cells } = state.board;
 
   // Helper to compute home‑side placement regions that respect Junqi constraints.
   const halfRows = rows / 2;
@@ -386,19 +418,16 @@ function randomizePlacement() {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  // Build candidate slots for different piece types.
-  const allHomeCells = [];
-  const homeRowStart = topSide ? 0 : halfRows;
-  const homeRowEnd = topSide ? halfRows - 1 : rows - 1;
-  for (let r = homeRowStart; r <= homeRowEnd; r++) {
-    for (let c = 0; c < cols; c++) {
-      allHomeCells.push({ r, c });
-    }
-  }
+  // Build candidate slots for different piece types, using board cell types.
+  const allHomeCells = cells.filter((cell) =>
+    topSide ? cell.r >= 0 && cell.r < halfRows : cell.r >= halfRows && cell.r < rows
+  );
 
-  const normalCells = allHomeCells.filter((p) => p.r !== frontRow);
-  const mineCells = allHomeCells.filter((p) => lastTwoRows.includes(p.r));
-  const flagCells = hqCols.map((c) => ({ r: hqRow, c }));
+  const postCells = allHomeCells.filter((cell) => cell.type === "post");
+  const mineCells = postCells.filter((cell) => lastTwoRows.includes(cell.r));
+  const flagCells = allHomeCells.filter(
+    (cell) => cell.type === "hq" && cell.r === hqRow && hqCols.includes(cell.c)
+  );
 
   // Place flag first, then mines, then bombs, then others.
   const ordered = [

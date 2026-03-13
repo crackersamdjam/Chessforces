@@ -224,6 +224,7 @@ body {
 }
 
 .board {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 0;
@@ -231,15 +232,12 @@ body {
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
-  background:
-    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px) repeat-x,
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px) repeat-y;
-  background-size: calc(100% / 5) 100%, 100% calc(100% / 12);
+  background: url("/board-4p.png") center/contain no-repeat, radial-gradient(circle at 50% 50%, #111827, #020617);
 }
 .cell {
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.2));
+  background: rgba(0, 0, 0, 0.18);
   border-radius: 12px;
   min-height: 54px;
   display: flex;
@@ -249,7 +247,26 @@ body {
   position: relative;
 }
 .cell:hover {
-  background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.09), rgba(0, 0, 0, 0.24));
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.cell--camp {
+  border-radius: 999px;
+  background: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+}
+
+.cell--hq {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), rgba(0, 0, 0, 0.3));
+  border: 1px solid rgba(124, 58, 237, 0.8);
+}
+
+.cellTokenHost {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .cellCoord {
   position: absolute;

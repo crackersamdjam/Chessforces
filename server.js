@@ -57,6 +57,71 @@ const PIECE_DEFS = [
   { type: "flag", label: "军旗(11)", rank: null, count: 1 }
 ];
 
+/**
+ * Create a simplified Luzhanqi-style board:
+ * - 12 rows x 5 cols
+ * - Mark a few cells as 行营 (camp) and 大本营 (HQ)
+ * - All other traversable cells are 兵站 (post)
+ */
+function createBoard() {
+  const rows = 12;
+  const cols = 5;
+  /** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"}[]} */
+  // @ts-ignore
+  const board = { rows, cols, cells: [] };
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      board.cells.push({ r, c, type: "post" });
+    }
+  }
+
+  // Helper to set cell type safely.
+  function mark(r, c, type) {
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+    board.cells[r * cols + c].type = type;
+  }
+
+  // Camps (行营) – approximate a couple of central circular spaces for each side.
+  // Top side camps.
+  mark(1, 1, "camp");
+  mark(1, 3, "camp");
+  mark(3, 1, "camp");
+  mark(3, 3, "camp");
+  // Bottom side camps (mirrored).
+  mark(8, 1, "camp");
+  mark(8, 3, "camp");
+  mark(10, 1, "camp");
+  mark(10, 3, "camp");
+
+  // Headquarters (大本营) – use the rows already implied by homeInfoForSeat.
+  const halfRows = rows / 2; // 6
+  // Top HQ row (row 5) at cols 1 and 3.
+  mark(halfRows - 1, 1, "hq");
+  mark(halfRows - 1, 3, "hq");
+  // Bottom HQ row (row 6) at cols 1 and 3.
+  mark(halfRows, 1, "hq");
+  mark(halfRows, 3, "hq");
+
+  return board;
+}
+
+function boardCellAt(board, pos) {
+  if (!pos) return null;
+  const { rows, cols, cells } = board;
+  if (
+    pos.r < 0 ||
+    pos.r >= rows ||
+    pos.c < 0 ||
+    pos.c >= cols ||
+    !Array.isArray(cells) ||
+    cells.length !== rows * cols
+  ) {
+    return null;
+  }
+  return cells[pos.r * cols + pos.c] ?? null;
+}
+
 function nowMs() {
   return Date.now();
 }
@@ -117,9 +182,8 @@ function getOrCreateRoom(roomId) {
       phase: PHASES.LOBBY,
       players: new Map(), // playerId -> {ws, name, seat, ready, joinedAt}
       seatToPlayerId: new Map(), // seat -> playerId
-      // 12 rows x 5 cols. We treat this as the canonical Luzhanqi grid,
-      // but keep the graphical layout simple.
-      board: { rows: 12, cols: 5 },
+      // 12 rows x 5 cols with typed cells (兵站 / 行营 / 大本营).
+      board: createBoard(),
       pieces: new Map(), // pieceId -> {id, ownerId, type, label, rank, pos:{r,c}|null, revealed:boolean, alive:boolean}
       turnSeat: null,
       lastMove: null,
@@ -246,7 +310,9 @@ function homeInfoForSeat(board, seat) {
 
 function isHQCell(board, seat, pos) {
   const info = homeInfoForSeat(board, seat);
-  return pos.r === info.hqRow && info.hqCols.includes(pos.c);
+  if (pos.r !== info.hqRow || !info.hqCols.includes(pos.c)) return false;
+  const cell = boardCellAt(board, pos);
+  return !!cell && cell.type === "hq";
 }
 
 function validatePlacement(room, piece, player) {
@@ -262,6 +328,12 @@ function validatePlacement(room, piece, player) {
     if (pos.r < room.board.rows / 2 || pos.r >= room.board.rows) return false;
   }
 
+  const cell = boardCellAt(room.board, pos);
+  if (!cell) return false;
+
+  // Do not allow initial placement on 行营.
+  if (cell.type === "camp") return false;
+
   if (piece.type === "bomb") {
     // Bombs cannot be in the front row.
     if (pos.r === info.frontRow) return false;
@@ -273,6 +345,9 @@ function validatePlacement(room, piece, player) {
   if (piece.type === "flag") {
     // Flag must be in one of the HQ cells.
     if (!isHQCell(room.board, player.seat, pos)) return false;
+  } else {
+    // Non-flag pieces cannot start in HQ.
+    if (cell.type === "hq") return false;
   }
   return true;
 }
