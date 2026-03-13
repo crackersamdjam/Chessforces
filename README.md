@@ -66,6 +66,7 @@ The **center** (rows 6–10, cols 6–10) is shared battle territory belonging t
 - **兵站 Post** — ordinary cell; normal movement and combat apply
 - **行营 Camp** — 5 special cells per arm in a plum-blossom pattern; pieces here are **immune to capture** and may not be attacked
 - **大本营 HQ** — 2 cells at the very back of each arm; the Flag must be placed on one of them
+- **山界 Mountain** — 4 cells at the inner corners of the center zone (positions (7,7), (7,9), (9,7), (9,9)); **only Engineers may enter** (see movement)
 
 ---
 
@@ -100,6 +101,8 @@ Before the game starts, each player arranges their 25 pieces anywhere within the
 4. **The Flag** must be placed on one of the two HQ cells
 5. **All other pieces** (including officers and Engineers) may occupy any remaining post or HQ cell in the home zone
 
+**Auto-randomize**: when you take a seat, your pieces are placed randomly in a legal configuration automatically. You can rearrange them freely before clicking Ready, including clicking one of your placed pieces and then clicking another to **swap** their positions.
+
 Once all pieces are placed, click **Ready**. The game begins when every seated player is ready.
 
 ---
@@ -124,12 +127,12 @@ The railway is a network of tracks that runs:
 
 A piece **on a railway cell** may slide any number of cells along connected tracks in a single turn, with the following rules:
 
-- **Engineers** (工兵): unrestricted railway movement — may turn freely at any junction, travel any distance; blocked only by pieces occupying intermediate cells
-- **All other pieces**: must travel in a straight line (same row or column); may use **at most one diagonal connector** per move to transition between arms, then continue straight on the new arm; blocked by any piece on an intermediate cell
+- **Engineers** (工兵): unrestricted railway movement — may turn freely at any junction, travel any distance; blocked only by pieces occupying intermediate cells. Engineers may also step off the railway onto an adjacent **山界 Mountain** cell in the same move, and can later exit a Mountain by stepping back onto any adjacent unblocked railway cell.
+- **All other pieces**: must travel in a straight line (same row or column). They may use **at most one diagonal connector** per move to transition between arms, but only when arriving from **deep inside an arm** (the cell before the connector must be outside the center band). This prevents taking a shortcut by starting near the junction and immediately diagonaling. After the diagonal the piece continues straight on the new arm. Blocked by any piece on an intermediate cell. Non-engineers **cannot enter Mountain cells** under any circumstances.
 
 Pieces **may not move** through occupied cells (they stop at the blocker or cannot reach the destination unless they can capture it).
 
-**Flags and Mines cannot move at all.**
+**Flags and Mines cannot move at all.** All other pieces — including Bombs — can move normally (road or railway).
 
 ---
 
@@ -166,7 +169,8 @@ The last player whose Flag is still alive wins. A player is **eliminated** as so
 | Hidden information | You only see your own piece labels; opponents' pieces show "?" until revealed in combat    |
 | Camp immunity      | A piece resting on a Camp cell cannot be captured; it can move out voluntarily             |
 | Mine placement     | Mines must stay in the back two rows/cols; they cannot move under any circumstances         |
-| Bomb placement     | Bombs cannot be placed on the front row/col; they also cannot move once placed (in standard rules, bombs are immovable — only road-moving in some variants) |
-| Engineer on railway| Engineers are the only pieces that can navigate the full railway network with free turns   |
+| Bomb movement      | Bombs cannot be placed on the front row/col during setup, but **can move** freely (road or railway) once the game begins |
+| Engineer on railway| Engineers navigate the full railway network with free turns and are the only pieces that can enter 山界 Mountain cells |
+| Mountain (山界)    | 4 cells at the inner corners of the center zone; Engineers may step onto them from an adjacent railway cell, and step back off onto any adjacent unblocked railway cell |
 | Turn skip          | Empty seats (players who haven't joined or have disconnected) are skipped automatically    |
 
