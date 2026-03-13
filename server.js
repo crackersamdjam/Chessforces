@@ -17,11 +17,9 @@ app.disable("x-powered-by");
 const publicDir = path.join(__dirname, "public");
 app.use(express.static(publicDir));
 
-app.get("/", (req, res) => {
-  res.redirect(`/room/${nanoid(10)}`);
-});
-
-app.get("/room/:roomId", (req, res) => {
+// Always serve the SPA shell; the client JS will assign/generate a room id
+// and update the URL without causing a full reload.
+app.get(["/", "/room/:roomId"], (req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
@@ -41,6 +39,23 @@ const PHASES = /** @type {const} */ ({
   PLAY: "play",
   DONE: "done"
 });
+
+// Full Junqi-style piece set (2‑side version, reused per seat).
+// We keep the standard ranks and special pieces but still allow up to 4 seats on one board.
+const PIECE_DEFS = [
+  { type: "marshal", label: "司令(9)", rank: 9, count: 1 },
+  { type: "general", label: "军长(8)", rank: 8, count: 1 },
+  { type: "major_general", label: "师长(7)", rank: 7, count: 2 },
+  { type: "brigadier", label: "旅长(6)", rank: 6, count: 2 },
+  { type: "colonel", label: "团长(5)", rank: 5, count: 2 },
+  { type: "major", label: "营长(4)", rank: 4, count: 2 },
+  { type: "captain", label: "连长(3)", rank: 3, count: 3 },
+  { type: "lieutenant", label: "排长(2)", rank: 2, count: 3 },
+  { type: "engineer", label: "工兵(1)", rank: 1, count: 3 },
+  { type: "bomb", label: "炸弹(0)", rank: null, count: 2 },
+  { type: "mine", label: "地雷(10)", rank: null, count: 3 },
+  { type: "flag", label: "军旗(11)", rank: null, count: 1 }
+];
 
 function nowMs() {
   return Date.now();
@@ -86,7 +101,9 @@ function roomSnapshotFor(room, viewerId) {
     board: room.board,
     pieces,
     turnSeat: room.turnSeat,
-    lastMove: room.lastMove
+    lastMove: room.lastMove,
+    winnerSeat: room.winnerSeat ?? null,
+    gameOverReason: room.gameOverReason ?? null
   };
 }
 
@@ -100,12 +117,14 @@ function getOrCreateRoom(roomId) {
       phase: PHASES.LOBBY,
       players: new Map(), // playerId -> {ws, name, seat, ready, joinedAt}
       seatToPlayerId: new Map(), // seat -> playerId
-      // Simple rectangular board for "simple Junqi":
-      // 12 rows x 5 cols. We keep it generic and do minimal validation.
+      // 12 rows x 5 cols. We treat this as the canonical Luzhanqi grid,
+      // but keep the graphical layout simple.
       board: { rows: 12, cols: 5 },
-      pieces: new Map(), // pieceId -> {id, ownerId, label, pos:{r,c}|null, revealed:boolean, alive:boolean}
+      pieces: new Map(), // pieceId -> {id, ownerId, type, label, rank, pos:{r,c}|null, revealed:boolean, alive:boolean}
       turnSeat: null,
-      lastMove: null
+      lastMove: null,
+      winnerSeat: null,
+      gameOverReason: null
     };
     rooms.set(roomId, room);
   }
@@ -128,6 +147,8 @@ function maybeAdvancePhase(room) {
   if (room.phase === PHASES.LOBBY && allReady) {
     room.phase = PHASES.PLACEMENT;
     room.updatedAt = nowMs();
+    room.winnerSeat = null;
+    room.gameOverReason = null;
     broadcast(room, { type: "phase", phase: room.phase });
   }
 
@@ -179,42 +200,171 @@ function pieceAt(room, pos) {
 }
 
 function ensurePieceSet(room, playerId) {
-  // A small subset for "simple" play: 10 pieces labeled in Chinese.
-  // You can expand later.
   const existing = Array.from(room.pieces.values()).some((p) => p.ownerId === playerId);
   if (existing) return;
 
-  const labels = ["司令", "军长", "师长", "旅长", "团长", "营长", "连长", "排长", "工兵", "炸弹"];
-  for (const label of labels) {
-    const id = nanoid(8);
-    room.pieces.set(id, {
-      id,
-      ownerId: playerId,
-      label,
-      pos: null,
-      revealed: false,
-      alive: true
-    });
+  for (const def of PIECE_DEFS) {
+    for (let i = 0; i < def.count; i++) {
+      const id = nanoid(8);
+      room.pieces.set(id, {
+        id,
+        ownerId: playerId,
+        type: def.type,
+        label: def.label,
+        rank: def.rank,
+        pos: null,
+        revealed: false,
+        alive: true
+      });
+    }
   }
 }
 
+function homeInfoForSeat(board, seat) {
+  // We split board into a top half (rows 0‑5) and bottom half (rows 6‑11).
+  // Seats N/W use the top, S/E use the bottom.
+  const top = seat === "N" || seat === "W";
+  const halfRows = board.rows / 2; // 6
+  if (top) {
+    return {
+      // rows 0..5
+      frontRow: 0,
+      lastTwoRows: [halfRows - 2, halfRows - 1], // 4,5
+      hqRow: halfRows - 1, // 5
+      hqCols: [1, 3]
+    };
+  }
+  // bottom side
+  return {
+    // rows 6..11
+    frontRow: board.rows - 1,
+    lastTwoRows: [board.rows - 2, board.rows - 1], // 10,11
+    hqRow: halfRows, // 6
+    hqCols: [1, 3]
+  };
+}
+
+function isHQCell(board, seat, pos) {
+  const info = homeInfoForSeat(board, seat);
+  return pos.r === info.hqRow && info.hqCols.includes(pos.c);
+}
+
+function validatePlacement(room, piece, player) {
+  if (!player.seat) return false;
+  const pos = piece.pos;
+  if (!pos) return true;
+  const info = homeInfoForSeat(room.board, player.seat);
+
+  // Only allow setup inside own half of the board.
+  if (player.seat === "N" || player.seat === "W") {
+    if (pos.r < 0 || pos.r >= room.board.rows / 2) return false;
+  } else {
+    if (pos.r < room.board.rows / 2 || pos.r >= room.board.rows) return false;
+  }
+
+  if (piece.type === "bomb") {
+    // Bombs cannot be in the front row.
+    if (pos.r === info.frontRow) return false;
+  }
+  if (piece.type === "mine") {
+    // Mines must be in the last two rows.
+    if (!info.lastTwoRows.includes(pos.r)) return false;
+  }
+  if (piece.type === "flag") {
+    // Flag must be in one of the HQ cells.
+    if (!isHQCell(room.board, player.seat, pos)) return false;
+  }
+  return true;
+}
+
 function resolveCapture(attacker, defender) {
-  // Intentionally simple:
-  // - If defender is "炸弹": both removed (revealed).
-  // - Else attacker wins, defender removed (revealed).
-  // This is NOT full Junqi rank logic.
-  defender.revealed = true;
   attacker.revealed = true;
-  if (defender.label === "炸弹") {
+  defender.revealed = true;
+
+  // Flag captured: attacker wins, defender removed.
+  if (defender.type === "flag") {
     defender.alive = false;
+    defender.pos = null;
+    return { result: "flag", attackerId: attacker.id, defenderId: defender.id };
+  }
+
+  // Landmine interaction.
+  if (defender.type === "mine") {
+    if (attacker.type === "engineer") {
+      // Engineer safely clears the mine.
+      defender.alive = false;
+      defender.pos = null;
+      return { result: "mine_cleared", attackerId: attacker.id, defenderId: defender.id };
+    }
+    // Non‑engineers die on the mine; optional rule: mine also removed.
     attacker.alive = false;
+    attacker.pos = null;
+    // Common fast‑play rule: mine removed too.
+    defender.alive = false;
+    defender.pos = null;
+    return { result: "mine_both", attackerId: attacker.id, defenderId: defender.id };
+  }
+
+  // Bomb interaction.
+  if (attacker.type === "bomb" || defender.type === "bomb") {
+    attacker.alive = false;
+    defender.alive = false;
+    attacker.pos = null;
+    defender.pos = null;
+    return { result: "bomb_both", attackerId: attacker.id, defenderId: defender.id };
+  }
+
+  // Normal rank comparison for officers/engineers.
+  if (typeof attacker.rank === "number" && typeof defender.rank === "number") {
+    if (attacker.rank > defender.rank) {
+      defender.alive = false;
+      defender.pos = null;
+      return { result: "attacker", attackerId: attacker.id, defenderId: defender.id };
+    }
+    if (attacker.rank < defender.rank) {
+      attacker.alive = false;
+      attacker.pos = null;
+      return { result: "defender", attackerId: attacker.id, defenderId: defender.id };
+    }
+    // Equal rank: both removed.
+    attacker.alive = false;
+    defender.alive = false;
     attacker.pos = null;
     defender.pos = null;
     return { result: "both", attackerId: attacker.id, defenderId: defender.id };
   }
+
+  // Fallback: treat as both removed.
+  attacker.alive = false;
   defender.alive = false;
+  attacker.pos = null;
   defender.pos = null;
-  return { result: "attacker", attackerId: attacker.id, defenderId: defender.id };
+  return { result: "both", attackerId: attacker.id, defenderId: defender.id };
+}
+
+function checkForWin(room) {
+  // If any flag is dead, the opposing seat team wins.
+  const aliveFlagsBySeat = new Map();
+  for (const piece of room.pieces.values()) {
+    if (!piece.alive || piece.type !== "flag" || !piece.ownerId) continue;
+    const ownerSeat = room.players.get(piece.ownerId)?.seat;
+    if (!ownerSeat) continue;
+    aliveFlagsBySeat.set(ownerSeat, true);
+  }
+  if (aliveFlagsBySeat.size >= 2) return;
+
+  if (aliveFlagsBySeat.size === 0) {
+    room.phase = PHASES.DONE;
+    room.winnerSeat = null;
+    room.gameOverReason = "both_flags_lost";
+    return;
+  }
+
+  // Only one seat still has a flag.
+  const [survivorSeat] = aliveFlagsBySeat.keys();
+  room.phase = PHASES.DONE;
+  room.winnerSeat = survivorSeat;
+  room.gameOverReason = "flag_captured";
 }
 
 wss.on("connection", (ws, req) => {
@@ -309,6 +459,11 @@ wss.on("connection", (ws, req) => {
       if (pos !== null && !isInBounds(room.board, pos)) return;
       if (pos !== null && pieceAt(room, pos)) return;
       piece.pos = pos;
+      if (!validatePlacement(room, piece, player)) {
+        // Revert if placement breaks Junqi constraints.
+        piece.pos = null;
+        return;
+      }
       room.updatedAt = nowMs();
       for (const [pid] of room.players) {
         safeSend(room.players.get(pid).ws, { type: "state", state: roomSnapshotFor(room, pid) });
@@ -326,13 +481,14 @@ wss.on("connection", (ws, req) => {
       if (!isInBounds(room.board, to)) return;
       const piece = room.pieces.get(pieceId);
       if (!piece || piece.ownerId !== playerId || !piece.pos || piece.alive === false) return;
+      if (piece.type === "flag" || piece.type === "mine") return; // cannot move
       const from = piece.pos;
       if (from.r === to.r && from.c === to.c) return;
       const target = pieceAt(room, to);
 
-      // Simple move rule: allow 1-step orthogonal when not capturing; capturing can be any (still simple).
+      // Move 1-step orthogonally (we do not model full railroad topology here).
       const manhattan = Math.abs(from.r - to.r) + Math.abs(from.c - to.c);
-      if (!target && manhattan !== 1) return;
+      if (manhattan !== 1) return;
 
       let capture = null;
       if (target && target.ownerId === playerId) return;
@@ -344,7 +500,12 @@ wss.on("connection", (ws, req) => {
       }
 
       room.lastMove = { by: player.seat, pieceId: piece.id, from, to, capture };
-      room.turnSeat = nextOccupiedSeat(room, room.turnSeat);
+      if (room.phase !== PHASES.DONE) {
+        room.turnSeat = nextOccupiedSeat(room, room.turnSeat);
+      }
+
+      // Check for win after each capture/move.
+      checkForWin(room);
 
       for (const [pid] of room.players) {
         safeSend(room.players.get(pid).ws, {

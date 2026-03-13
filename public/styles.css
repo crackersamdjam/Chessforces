@@ -226,12 +226,20 @@ body {
 .board {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
+  gap: 0;
   user-select: none;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px) repeat-x,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px) repeat-y;
+  background-size: calc(100% / 5) 100%, 100% calc(100% / 12);
 }
 .cell {
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.2));
   border-radius: 12px;
   min-height: 54px;
   display: flex;
@@ -241,7 +249,7 @@ body {
   position: relative;
 }
 .cell:hover {
-  background: rgba(0, 0, 0, 0.24);
+  background: radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.09), rgba(0, 0, 0, 0.24));
 }
 .cellCoord {
   position: absolute;

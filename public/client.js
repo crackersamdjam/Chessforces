@@ -1,17 +1,25 @@
 const $ = (id) => document.getElementById(id);
 
-const roomId = (() => {
-  const parts = location.pathname.split("/").filter(Boolean);
-  if (parts[0] === "room" && parts[1]) return parts[1];
-  return null;
-})();
-
-if (!roomId) {
-  location.href = "/";
+function genRoomId() {
+  // Simple client-side id generator; good enough for a casual game.
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let s = "";
+  for (let i = 0; i < 10; i++) {
+    s += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return s;
 }
 
+let roomId = (() => {
+  const match = location.pathname.match(/^\/room\/([^/]+)/);
+  if (match) return match[1];
+  const id = genRoomId();
+  // Update URL without a network reload; server also serves this path.
+  history.replaceState(null, "", `/room/${id}`);
+  return id;
+})();
+
 $("roomId").textContent = roomId;
-$("phaseLine").textContent = "Connecting…";
 
 const wsUrl = (() => {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -21,11 +29,17 @@ const wsUrl = (() => {
 /** @type {{playerId:string|null, seats:string[], state:any|null}} */
 const app = {
   playerId: null,
-  seats: [],
+  seats: ["N", "E", "S", "W"],
   state: null
 };
 
 let selectedPieceId = null;
+
+// Cached DOM views so we don't rebuild the whole screen every update.
+/** @type {Map<string, {card:HTMLElement, nameEl:HTMLElement, statusEl:HTMLElement, btn:HTMLButtonElement}>} */
+const seatViews = new Map();
+/** @type {Map<string, {cell:HTMLElement, tokenHost:HTMLElement}>} */
+const boardViews = new Map();
 
 function send(obj) {
   if (socket.readyState !== WebSocket.OPEN) return;
@@ -47,13 +61,130 @@ function setHint(text) {
   $("hint").textContent = text || "";
 }
 
+function ensureSeatViews() {
+  const grid = $("seatsGrid");
+  if (!grid || seatViews.size === app.seats.length) return;
+  grid.innerHTML = "";
+
+  for (const seat of app.seats) {
+    const card = document.createElement("div");
+    card.className = "seatCard";
+
+    const seatTop = document.createElement("div");
+    seatTop.className = "seatTop";
+
+    const left = document.createElement("div");
+    const seatName = document.createElement("div");
+    seatName.className = "seatName";
+    seatName.textContent = seatLabel(seat);
+    const nameLine = document.createElement("div");
+    nameLine.className = "muted";
+    nameLine.style.fontSize = "12px";
+    nameLine.style.marginTop = "2px";
+    left.appendChild(seatName);
+    left.appendChild(nameLine);
+
+    const pill = document.createElement("div");
+    pill.className = "pill";
+    pill.textContent = "—";
+
+    seatTop.appendChild(left);
+    seatTop.appendChild(pill);
+
+    const actions = document.createElement("div");
+    actions.className = "seatActions";
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.textContent = "Sit";
+    btn.dataset.seat = seat;
+    actions.appendChild(btn);
+
+    card.appendChild(seatTop);
+    card.appendChild(actions);
+    grid.appendChild(card);
+
+    btn.addEventListener("click", () => {
+      const state = app.state;
+      const current = state?.players.find((p) => p.id === app.playerId) || null;
+      const playersBySeat = new Map();
+      if (state) {
+        for (const p of state.players) {
+          if (p.seat) playersBySeat.set(p.seat, p);
+        }
+      }
+      const p = playersBySeat.get(seat) || null;
+      const isMe = p && current && p.id === current.id;
+      const occupied = Boolean(p);
+      if (!occupied) {
+        send({ type: "take_seat", seat });
+      } else if (isMe) {
+        send({ type: "leave_seat" });
+      }
+    });
+
+    seatViews.set(seat, { card, nameEl: nameLine, statusEl: pill, btn });
+  }
+}
+
+function ensureBoardViews() {
+  const boardEl = $("board");
+  if (!boardEl || boardViews.size) return;
+  // Board is 12x5 in this implementation.
+  const rows = 12;
+  const cols = 5;
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  boardEl.innerHTML = "";
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      const key = `${r},${c}`;
+      cell.dataset.r = String(r);
+      cell.dataset.c = String(c);
+
+      const coord = document.createElement("div");
+      coord.className = "cellCoord";
+      coord.textContent = `${r},${c}`;
+      cell.appendChild(coord);
+
+      const tokenHost = document.createElement("div");
+      tokenHost.style.width = "100%";
+      tokenHost.style.height = "100%";
+      tokenHost.style.display = "flex";
+      tokenHost.style.alignItems = "center";
+      tokenHost.style.justifyContent = "center";
+      cell.appendChild(tokenHost);
+
+      cell.addEventListener("click", () => onCellClick({ r, c }));
+
+      boardEl.appendChild(cell);
+      boardViews.set(key, { cell, tokenHost });
+    }
+  }
+}
+
 function render() {
   const state = app.state;
-  if (!state) return;
+  if (!state) {
+    // Do not touch existing text before we have an initial room state;
+    // this avoids flicker between transient connection messages.
+    return;
+  }
 
   $("phaseLine").textContent = `Phase: ${state.phase}`;
-  $("turnLine").textContent =
-    state.phase === "play" ? `Turn: ${state.turnSeat ? seatLabel(state.turnSeat) : "-"}` : "";
+  if (state.phase === "done") {
+    $("turnLine").textContent = state.winnerSeat
+      ? `Game over. Winner: ${seatLabel(state.winnerSeat)}`
+      : "Game over.";
+  } else if (state.phase === "play") {
+    $("turnLine").textContent = `Turn: ${state.turnSeat ? seatLabel(state.turnSeat) : "-"}`;
+  } else {
+    $("turnLine").textContent = "";
+  }
+
+  ensureSeatViews();
+  ensureBoardViews();
 
   renderSeats(state);
   renderBoard(state);
@@ -65,95 +196,58 @@ function render() {
 }
 
 function renderSeats(state) {
-  const grid = $("seatsGrid");
-  grid.innerHTML = "";
-
   const playersBySeat = new Map();
   for (const p of state.players) {
     if (p.seat) playersBySeat.set(p.seat, p);
   }
 
   for (const seat of app.seats) {
-    const card = document.createElement("div");
-    card.className = "seatCard";
+    const view = seatViews.get(seat);
+    if (!view) continue;
     const p = playersBySeat.get(seat) || null;
     const isMe = p && p.id === app.playerId;
     const occupied = Boolean(p);
-    const readyClass = p?.ready ? "pill ready" : "pill";
-    card.innerHTML = `
-      <div class="seatTop">
-        <div>
-          <div class="seatName">${seatLabel(seat)}</div>
-          <div class="muted" style="font-size:12px;margin-top:2px;">
-            ${occupied ? (isMe ? "You" : escapeHtml(p.name)) : "Empty"}
-          </div>
-        </div>
-        <div class="${readyClass}">${occupied ? (p.ready ? "Ready" : "Not ready") : "—"}</div>
-      </div>
-      <div class="seatActions">
-        ${
-          occupied
-            ? isMe
-              ? `<button class="btn" data-action="leave" data-seat="${seat}">Leave</button>`
-              : `<button class="btn" disabled>Occupied</button>`
-            : `<button class="btn primary" data-action="take" data-seat="${seat}">Sit</button>`
-        }
-      </div>
-    `;
-    grid.appendChild(card);
-  }
 
-  grid.querySelectorAll("button[data-action]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const action = btn.getAttribute("data-action");
-      const seat = btn.getAttribute("data-seat");
-      if (!seat) return;
-      if (action === "take") send({ type: "take_seat", seat });
-      if (action === "leave") send({ type: "leave_seat" });
-    });
-  });
+    view.nameEl.textContent = occupied ? (isMe ? "You" : p.name) : "Empty";
+    view.statusEl.textContent = occupied ? (p.ready ? "Ready" : "Not ready") : "—";
+    view.statusEl.classList.toggle("ready", !!p?.ready);
+
+    if (!occupied) {
+      view.btn.disabled = false;
+      view.btn.classList.add("primary");
+      view.btn.textContent = "Sit";
+    } else if (isMe) {
+      view.btn.disabled = false;
+      view.btn.classList.remove("primary");
+      view.btn.textContent = "Leave";
+    } else {
+      view.btn.disabled = true;
+      view.btn.classList.remove("primary");
+      view.btn.textContent = "Occupied";
+    }
+  }
 }
 
 function renderBoard(state) {
-  const boardEl = $("board");
-  const { rows, cols } = state.board;
-  boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  boardEl.innerHTML = "";
-
   const pieceByCell = new Map();
   for (const piece of state.pieces) {
     if (!piece.pos) continue;
     pieceByCell.set(`${piece.pos.r},${piece.pos.c}`, piece);
   }
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cell = document.createElement("div");
-      cell.className = "cell";
-      cell.setAttribute("data-r", String(r));
-      cell.setAttribute("data-c", String(c));
-      const key = `${r},${c}`;
-      const piece = pieceByCell.get(key) || null;
-
-      const coord = document.createElement("div");
-      coord.className = "cellCoord";
-      coord.textContent = `${r},${c}`;
-      cell.appendChild(coord);
-
-      if (piece) {
-        const token = document.createElement("div");
-        token.className = "token";
-        if (piece.id === selectedPieceId) token.classList.add("selected");
-        token.innerHTML = `
-          <div class="label">${escapeHtml(piece.label)}</div>
-          <div class="owner">${piece.ownerSeat ?? "?"}</div>
-        `;
-        cell.appendChild(token);
-      }
-
-      cell.addEventListener("click", () => onCellClick({ r, c }));
-      boardEl.appendChild(cell);
-    }
+  for (const [key, view] of boardViews) {
+    const piece = pieceByCell.get(key) || null;
+    const host = view.tokenHost;
+    host.innerHTML = "";
+    if (!piece) continue;
+    const token = document.createElement("div");
+    token.className = "token";
+    if (piece.id === selectedPieceId) token.classList.add("selected");
+    token.innerHTML = `
+      <div class="label">${escapeHtml(piece.label)}</div>
+      <div class="owner">${piece.ownerSeat ?? "?"}</div>
+    `;
+    host.appendChild(token);
   }
 }
 
@@ -248,15 +342,106 @@ function addChatLine({ from, text, at }) {
   log.scrollTop = log.scrollHeight;
 }
 
+function randomizePlacement() {
+  const state = app.state;
+  if (!state) return;
+  if (state.phase !== "lobby" && state.phase !== "placement") {
+    setHint("You can only randomize at the start.");
+    setTimeout(() => setHint(""), 1400);
+    return;
+  }
+  const me = state.players.find((p) => p.id === app.playerId);
+  if (!me?.seat) {
+    setHint("Take a seat first.");
+    setTimeout(() => setHint(""), 1400);
+    return;
+  }
+
+  // Use our visible (unhidden to us) pieces as "ours".
+  const pieces = state.pieces.filter((p) => p.label !== "?" && isProbablyMine(state, p));
+  if (!pieces.length) return;
+
+  const { rows, cols } = state.board;
+
+  // Helper to compute home‑side placement regions that respect Junqi constraints.
+  const halfRows = rows / 2;
+  const topSide = me.seat === "N" || me.seat === "W";
+  const frontRow = topSide ? 0 : rows - 1;
+  const lastTwoRows = topSide ? [halfRows - 2, halfRows - 1] : [rows - 2, rows - 1];
+  const hqRow = topSide ? halfRows - 1 : halfRows;
+  const hqCols = [1, 3];
+
+  function posKey(p) {
+    return `${p.r},${p.c}`;
+  }
+
+  const occupied = new Set(
+    state.pieces
+      .filter((p) => p.pos)
+      .map((p) => posKey(p.pos))
+  );
+
+  function randomChoice(arr) {
+    if (!arr.length) return null;
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  // Build candidate slots for different piece types.
+  const allHomeCells = [];
+  const homeRowStart = topSide ? 0 : halfRows;
+  const homeRowEnd = topSide ? halfRows - 1 : rows - 1;
+  for (let r = homeRowStart; r <= homeRowEnd; r++) {
+    for (let c = 0; c < cols; c++) {
+      allHomeCells.push({ r, c });
+    }
+  }
+
+  const normalCells = allHomeCells.filter((p) => p.r !== frontRow);
+  const mineCells = allHomeCells.filter((p) => lastTwoRows.includes(p.r));
+  const flagCells = hqCols.map((c) => ({ r: hqRow, c }));
+
+  // Place flag first, then mines, then bombs, then others.
+  const ordered = [
+    ...pieces.filter((p) => p.label.startsWith("军旗")),
+    ...pieces.filter((p) => p.label.startsWith("地雷")),
+    ...pieces.filter((p) => p.label.startsWith("炸弹")),
+    ...pieces.filter(
+      (p) => !p.label.startsWith("军旗") && !p.label.startsWith("地雷") && !p.label.startsWith("炸弹")
+    )
+  ];
+
+  for (const piece of ordered) {
+    let candidates;
+    if (piece.label.startsWith("军旗")) {
+      candidates = flagCells;
+    } else if (piece.label.startsWith("地雷")) {
+      candidates = mineCells;
+    } else if (piece.label.startsWith("炸弹")) {
+      candidates = normalCells.filter((p) => p.r !== frontRow);
+    } else {
+      candidates = normalCells;
+    }
+
+    const available = candidates.filter((p) => !occupied.has(posKey(p)));
+    if (!available.length) continue;
+    const pos = randomChoice(available);
+    occupied.add(posKey(pos));
+    send({ type: "place_piece", pieceId: piece.id, pos });
+  }
+
+  setHint("Board randomized.");
+  setTimeout(() => setHint(""), 1400);
+}
+
 const socket = new WebSocket(wsUrl);
 
 socket.addEventListener("open", () => {
-  $("phaseLine").textContent = "Connected.";
   setHint("Pick a seat, set ready, then place at least 1 piece to start.");
+  render();
 });
 
 socket.addEventListener("close", () => {
-  $("phaseLine").textContent = "Disconnected. Refresh to reconnect.";
+  render();
 });
 
 socket.addEventListener("message", (ev) => {
@@ -326,4 +511,6 @@ $("sendChatBtn").addEventListener("click", sendChat);
 $("chatInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendChat();
 });
+
+$("randomizeBtn").addEventListener("click", randomizePlacement);
 
