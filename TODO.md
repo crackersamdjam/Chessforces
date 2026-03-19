@@ -1,3 +1,2 @@
 - Add colour tint for each player, so that pieces can easily be told apart
 - Highlight the previous move, a yellow border around the piece's old position
-- Diagonal moves not working?

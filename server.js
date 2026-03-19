@@ -693,6 +693,22 @@ function isFriendly(room, seatA, seatB) {
 }
 
 /**
+ * Returns true if moving one step from `from` to `to` is a valid road step:
+ *  • Standard orthogonal step (dr+dc === 1), OR
+ *  • Diagonal step (|dr|=|dc|=1) where either cell is a camp (行营).
+ */
+function isValidRoadStep(room, from, to) {
+  const dr = Math.abs(to.r - from.r), dc = Math.abs(to.c - from.c);
+  if (dr + dc === 1) return true;
+  if (dr === 1 && dc === 1) {
+    const fc = boardCellAt(room.board, from);
+    const tc = boardCellAt(room.board, to);
+    return fc?.type === "camp" || tc?.type === "camp";
+  }
+  return false;
+}
+
+/**
  * Returns true if `piece` has at least one legal destination in the current
  * room state.  Respects:
  *  • 1-step road moves and multi-step railway moves (HQ railway block included)
@@ -714,9 +730,7 @@ function canMovePiece(room, piece) {
     if (cell.type === "mountain" && piece.type !== "engineer") continue;
 
     // Move type validation.
-    const absDr = Math.abs(to.r - from.r), absDc = Math.abs(to.c - from.c);
-    const isRoadMove = absDr + absDc === 1;
-    if (!isRoadMove && !isValidRailwayMove(room, piece, from, to)) continue;
+    if (!isValidRoadStep(room, from, to) && !isValidRailwayMove(room, piece, from, to)) continue;
 
     // Target piece restrictions.
     const target = pieceAt(room, to);
@@ -909,10 +923,8 @@ wss.on("connection", (ws, req) => {
       const from = piece.pos;
       if (from.r === to.r && from.c === to.c) return;
 
-      // Validate move: 1-step road OR multi-step railway slide.
-      const dr = Math.abs(to.r - from.r), dc = Math.abs(to.c - from.c);
-      const isRoadMove = dr + dc === 1;
-      if (!isRoadMove && !isValidRailwayMove(room, piece, from, to)) {
+      // Validate move: 1-step road (including camp diagonals) OR multi-step railway slide.
+      if (!isValidRoadStep(room, from, to) && !isValidRailwayMove(room, piece, from, to)) {
         safeSend(ws, { type: "move_result", ok: false, reason: "Invalid move: not a valid road or railway path." });
         return;
       }
