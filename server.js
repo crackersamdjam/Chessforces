@@ -233,15 +233,16 @@ function roomSnapshotFor(room, viewerId) {
   }
 
   const pieces = [];
-  // Pieces: label is only visible to the owner — never revealed to opponents.
   for (const piece of room.pieces.values()) {
     const isOwner = piece.ownerId === viewerId;
+    const isRevealed = !!piece.flagRevealed;
     pieces.push({
       id: piece.id,
       ownerSeat: room.players.get(piece.ownerId)?.seat ?? null,
       pos: piece.pos,
-      label: isOwner ? piece.label : "?",
-      type: isOwner ? piece.type : null
+      label: isOwner || isRevealed ? piece.label : "?",
+      type: isOwner || isRevealed ? piece.type : null,
+      flagRevealed: isRevealed
     });
   }
 
@@ -253,7 +254,8 @@ function roomSnapshotFor(room, viewerId) {
     pieces,
     turnSeat: room.turnSeat,
     lastMove: room.lastMove,
-    winnerSeat: room.winnerSeat ?? null,
+    winnerTeam: room.winnerTeam ?? null,
+    eliminatedSeats: Array.from(room.eliminatedSeats ?? []),
     gameOverReason: room.gameOverReason ?? null
   };
 }
@@ -270,10 +272,11 @@ function getOrCreateRoom(roomId) {
       seatToPlayerId: new Map(), // seat -> playerId
       // 17 rows × 17 cols cross-shaped board with typed cells (兵站 / 行营 / 大本营).
       board: createBoard(),
-      pieces: new Map(), // pieceId -> {id, ownerId, type, label, rank, pos:{r,c}|null, alive:boolean}
+      pieces: new Map(), // pieceId -> {id, ownerId, type, label, rank, pos:{r,c}|null, alive:boolean, flagRevealed:boolean}
       turnSeat: null,
       lastMove: null,
-      winnerSeat: null,
+      winnerTeam: null,
+      eliminatedSeats: new Set(),
       gameOverReason: null
     };
     rooms.set(roomId, room);
@@ -318,6 +321,9 @@ function getRailAdj(room) {
  * Capture / camp validity is checked by the caller after this returns true.
  */
 function isValidRailwayMove(room, piece, from, to) {
+  // Pieces in a 大本营 (HQ) cell are not allowed to use the railway to exit.
+  if (boardCellAt(room.board, from)?.type === "hq") return false;
+
   const adj = getRailAdj(room);
   const startKey = `${from.r},${from.c}`;
   const toKey   = `${to.r},${to.c}`;
@@ -453,7 +459,8 @@ function maybeAdvancePhase(room) {
   room.phase = PHASES.PLAY;
   room.turnSeat = SEATS.find((s) => room.seatToPlayerId.has(s)) ?? null;
   room.updatedAt = nowMs();
-  room.winnerSeat = null;
+  room.winnerTeam = null;
+  room.eliminatedSeats = new Set();
   room.gameOverReason = null;
   broadcastState(room);
 }
@@ -462,7 +469,7 @@ function nextOccupiedSeat(room, fromSeat) {
   const startIdx = SEATS.indexOf(fromSeat);
   for (let i = 1; i <= SEATS.length; i++) {
     const seat = SEATS[(startIdx + i) % SEATS.length];
-    if (room.seatToPlayerId.has(seat)) return seat;
+    if (room.seatToPlayerId.has(seat) && !room.eliminatedSeats.has(seat)) return seat;
   }
   return fromSeat;
 }
@@ -502,7 +509,8 @@ function ensurePieceSet(room, playerId) {
         label: def.label,
         rank: def.rank,
         pos: null,
-        alive: true
+        alive: true,
+        flagRevealed: false
       });
     }
   }
@@ -607,7 +615,6 @@ function resolveCapture(attacker, defender) {
     defender.alive = false;
     defender.pos = null;
     return { result: "flag", attackerId: attacker.id, defenderId: defender.id };
-    // TODO: may need additional eliminatePlayer logic
   }
   
   // Bomb interaction.
@@ -656,29 +663,109 @@ function resolveCapture(attacker, defender) {
   assert(false, "Invalid combat resolution");
 }
 
-function checkForWin(room) {
-  // If any flag is dead, the opposing seat team wins.
-  const aliveFlagsBySeat = new Map();
+// Teams: N+S vs E+W.
+const TEAM_OF = { N: "NS", S: "NS", E: "EW", W: "EW" };
+
+/** Eliminate a player: mark their pieces dead and record their seat as eliminated. */
+function eliminatePlayer(room, seat) {
+  if (room.eliminatedSeats.has(seat)) return;
+  room.eliminatedSeats.add(seat);
+  const playerId = room.seatToPlayerId.get(seat);
+  if (!playerId) return;
   for (const piece of room.pieces.values()) {
-    if (!piece.alive || piece.type !== "flag" || !piece.ownerId) continue;
-    const ownerSeat = room.players.get(piece.ownerId)?.seat;
-    if (!ownerSeat) continue;
-    aliveFlagsBySeat.set(ownerSeat, true);
+    if (piece.ownerId === playerId && piece.alive !== false) {
+      piece.alive = false;
+      piece.pos = null;
+    }
   }
-  if (aliveFlagsBySeat.size >= 2) return;
+}
 
-  if (aliveFlagsBySeat.size === 0) {
+/**
+ * Returns true if `piece` has at least one legal destination in the current
+ * room state.  Respects:
+ *  • 1-step road moves and multi-step railway moves (HQ railway block included)
+ *  • railonly / mountain restrictions
+ *  • Cannot land on own or teammate's piece; cannot capture a camp-immune piece
+ */
+function canMovePiece(room, piece) {
+  if (!piece.alive || !piece.pos || piece.type === "flag" || piece.type === "mine") return false;
+  const ownSeat = room.players.get(piece.ownerId)?.seat;
+  if (!ownSeat) return false;
+  const ownTeam = TEAM_OF[ownSeat];
+  const from = piece.pos;
+
+  for (const cell of room.board.cells) {
+    if (cell.type === "inactive" || cell.type === "railonly") continue;
+    const to = { r: cell.r, c: cell.c };
+    if (to.r === from.r && to.c === from.c) continue;
+
+    // Mountain cells: engineers only.
+    if (cell.type === "mountain" && piece.type !== "engineer") continue;
+
+    // Move type validation.
+    const absDr = Math.abs(to.r - from.r), absDc = Math.abs(to.c - from.c);
+    const isRoadMove = absDr + absDc === 1;
+    if (!isRoadMove && !isValidRailwayMove(room, piece, from, to)) continue;
+
+    // Target piece restrictions.
+    const target = pieceAt(room, to);
+    if (target) {
+      const targetSeat = room.players.get(target.ownerId)?.seat;
+      // Cannot capture own or teammate's piece.
+      if (targetSeat && TEAM_OF[targetSeat] === ownTeam) continue;
+      // Pieces on camp cells are immune.
+      if (cell.type === "camp") continue;
+    }
+
+    return true; // found at least one legal move
+  }
+  return false;
+}
+
+/** Returns true if the player at `seat` has at least one piece that can make a legal move. */
+function hasMovablePieces(room, seat) {
+  const playerId = room.seatToPlayerId.get(seat);
+  if (!playerId) return false;
+  for (const piece of room.pieces.values()) {
+    if (piece.ownerId !== playerId) continue;
+    if (canMovePiece(room, piece)) return true;
+  }
+  return false;
+}
+
+/** Eliminate any non-yet-eliminated player who has no movable pieces left. */
+function checkEliminations(room) {
+  for (const [seat] of room.seatToPlayerId) {
+    if (room.eliminatedSeats.has(seat)) continue;
+    if (!hasMovablePieces(room, seat)) {
+      eliminatePlayer(room, seat);
+    }
+  }
+}
+
+function checkForWin(room) {
+  if (room.phase === PHASES.DONE) return;
+
+  const seatedSeats = Array.from(room.seatToPlayerId.keys());
+  const nsSeats = seatedSeats.filter((s) => TEAM_OF[s] === "NS");
+  const ewSeats = seatedSeats.filter((s) => TEAM_OF[s] === "EW");
+
+  const nsElim = nsSeats.length > 0 && nsSeats.every((s) => room.eliminatedSeats.has(s));
+  const ewElim = ewSeats.length > 0 && ewSeats.every((s) => room.eliminatedSeats.has(s));
+
+  if (nsElim && ewElim) {
     room.phase = PHASES.DONE;
-    room.winnerSeat = null;
-    room.gameOverReason = "both_flags_lost";
-    return;
+    room.winnerTeam = null; // draw
+    room.gameOverReason = "draw";
+  } else if (nsElim) {
+    room.phase = PHASES.DONE;
+    room.winnerTeam = "EW";
+    room.gameOverReason = "team_eliminated";
+  } else if (ewElim) {
+    room.phase = PHASES.DONE;
+    room.winnerTeam = "NS";
+    room.gameOverReason = "team_eliminated";
   }
-
-  // Only one seat still has a flag.
-  const [survivorSeat] = aliveFlagsBySeat.keys();
-  room.phase = PHASES.DONE;
-  room.winnerSeat = survivorSeat;
-  room.gameOverReason = "flag_captured";
 }
 
 wss.on("connection", (ws, req) => {
@@ -818,6 +905,11 @@ wss.on("connection", (ws, req) => {
 
       const target = pieceAt(room, to);
       if (target && target.ownerId === playerId) return; // can't capture own piece
+      // Can't capture a teammate's piece (N+S or E+W).
+      if (target) {
+        const targetSeat = room.players.get(target.ownerId)?.seat;
+        if (targetSeat && TEAM_OF[targetSeat] === TEAM_OF[player.seat]) return;
+      }
       // Pieces on camp cells are immune to capture.
       if (target && boardCellAt(room.board, to)?.type === "camp") return;
 
@@ -825,16 +917,33 @@ wss.on("connection", (ws, req) => {
       if (target) {
         capture = resolveCapture(piece, target);
         if (piece.alive !== false) piece.pos = to;
+
+        // Marshal killed → reveal the victim's flag(s).
+        if (target.type === "marshal" && target.alive === false) {
+          for (const p of room.pieces.values()) {
+            if (p.ownerId === target.ownerId && p.type === "flag") {
+              p.flagRevealed = true;
+            }
+          }
+        }
+        // Flag captured → eliminate that player immediately.
+        if (target.type === "flag" && target.alive === false) {
+          const victimSeat = room.players.get(target.ownerId)?.seat;
+          if (victimSeat) eliminatePlayer(room, victimSeat);
+        }
       } else {
         piece.pos = to;
       }
+
+      // Eliminate any player (including the mover) who has no movable pieces left.
+      checkEliminations(room);
 
       room.lastMove = { by: player.seat, pieceId: piece.id, from, to, capture };
       if (room.phase !== PHASES.DONE) {
         room.turnSeat = nextOccupiedSeat(room, room.turnSeat);
       }
 
-      // Check for win after each capture/move.
+      // Check for team win.
       checkForWin(room);
 
       for (const [pid] of room.players) {

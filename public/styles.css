@@ -203,6 +203,10 @@ body {
   border-color: rgba(34, 197, 94, 0.55);
   color: rgba(34, 197, 94, 0.9);
 }
+.pill.eliminated {
+  border-color: rgba(239, 68, 68, 0.55);
+  color: rgba(239, 68, 68, 0.9);
+}
 .seatActions {
   margin-top: 8px;
   display: flex;
@@ -361,6 +365,10 @@ body.debug .cellCoord {
 }
 .token.selected {
   outline: 2px solid rgba(124, 58, 237, 0.75);
+}
+.token--revealed {
+  border-color: rgba(251, 191, 36, 0.8);
+  background: rgba(251, 191, 36, 0.12);
 }
 
 .piecesList {

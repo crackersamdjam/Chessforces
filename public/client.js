@@ -304,9 +304,10 @@ function render() {
 
   $("phaseLine").textContent = `Phase: ${state.phase}`;
   if (state.phase === "done") {
-    $("turnLine").textContent = state.winnerSeat
-      ? `Game over. Winner: ${seatLabel(state.winnerSeat)}`
-      : "Game over.";
+    const teamLabels = { NS: "North & South", EW: "East & West" };
+    $("turnLine").textContent = state.winnerTeam
+      ? `Game over. ${teamLabels[state.winnerTeam] ?? state.winnerTeam} wins!`
+      : "Game over. Draw.";
   } else if (state.phase === "play") {
     $("turnLine").textContent = `Turn: ${state.turnSeat ? seatLabel(state.turnSeat) : "-"}`;
   } else {
@@ -346,9 +347,17 @@ function renderSeats(state) {
     const isMe = p && p.id === app.playerId;
     const occupied = Boolean(p);
 
+    const isEliminated = (state.eliminatedSeats ?? []).includes(seat);
     view.nameEl.textContent = occupied ? (isMe ? "You" : p.name) : "Empty";
-    view.statusEl.textContent = occupied ? (p.ready ? "Ready" : "Not ready") : "—";
-    view.statusEl.classList.toggle("ready", !!p?.ready);
+    if (isEliminated) {
+      view.statusEl.textContent = "Eliminated";
+      view.statusEl.classList.remove("ready");
+      view.statusEl.classList.add("eliminated");
+    } else {
+      view.statusEl.classList.remove("eliminated");
+      view.statusEl.textContent = occupied ? (p.ready ? "Ready" : "Not ready") : "—";
+      view.statusEl.classList.toggle("ready", !!p?.ready);
+    }
 
     const gameActive = state.phase === "play" || state.phase === "done";
     view.btn.style.display = gameActive ? "none" : "";
@@ -383,6 +392,7 @@ function renderBoard(state) {
     const token = document.createElement("div");
     token.className = "token";
     if (piece.id === selectedPieceId) token.classList.add("selected");
+    if (piece.flagRevealed) token.classList.add("token--revealed");
     const coord = formatSideCoord(piece);
     token.innerHTML = `
       <div class="label">${escapeHtml(piece.label)}</div>
