@@ -893,33 +893,54 @@ wss.on("connection", (ws, req) => {
     if (msg.type === "move") {
       if (room.phase !== PHASES.PLAY) return;
       if (!player.seat) return;
-      if (room.turnSeat !== player.seat) return;
+      if (room.turnSeat !== player.seat) {
+        safeSend(ws, { type: "move_result", ok: false, reason: "It is not your turn." });
+        return;
+      }
       const pieceId = String(msg.pieceId ?? "");
       const to = msg.to ?? null;
       if (!isInBounds(room.board, to)) return;
       const piece = room.pieces.get(pieceId);
       if (!piece || piece.ownerId !== playerId || !piece.pos || piece.alive === false) return;
-      if (piece.type === "flag" || piece.type === "mine") return; // cannot move
+      if (piece.type === "flag" || piece.type === "mine") {
+        safeSend(ws, { type: "move_result", ok: false, reason: "Flags and mines cannot move." });
+        return;
+      }
       const from = piece.pos;
       if (from.r === to.r && from.c === to.c) return;
 
       // Validate move: 1-step road OR multi-step railway slide.
       const dr = Math.abs(to.r - from.r), dc = Math.abs(to.c - from.c);
       const isRoadMove = dr + dc === 1;
-      if (!isRoadMove && !isValidRailwayMove(room, piece, from, to)) return;
+      if (!isRoadMove && !isValidRailwayMove(room, piece, from, to)) {
+        safeSend(ws, { type: "move_result", ok: false, reason: "Invalid move: not a valid road or railway path." });
+        return;
+      }
 
       // Destination cell restrictions.
       const toCell = boardCellAt(room.board, to);
-      if (toCell?.type === "railonly") return; // rail pass-through only, no landing
-      if (toCell?.type === "mountain" && piece.type !== "engineer") return; // 山界: engineers only
+      if (toCell?.type === "railonly") {
+        safeSend(ws, { type: "move_result", ok: false, reason: "Pieces cannot land on a rail pass-through cell." });
+        return;
+      }
+      if (toCell?.type === "mountain" && piece.type !== "engineer") {
+        safeSend(ws, { type: "move_result", ok: false, reason: "Only engineers (工兵) can enter mountain (山界) cells." });
+        return;
+      }
 
       const target = pieceAt(room, to);
       if (target) {
         const targetSeat = room.players.get(target.ownerId)?.seat;
-        if (isFriendly(room, player.seat, targetSeat)) return;
+        if (isFriendly(room, player.seat, targetSeat)) {
+          safeSend(ws, { type: "move_result", ok: false, reason: "Cannot capture a friendly piece." });
+          return;
+        }
       }
       // Pieces on camp cells are immune to capture.
-      if (target && boardCellAt(room.board, to)?.type === "camp") return;
+      if (target && boardCellAt(room.board, to)?.type === "camp") {
+        safeSend(ws, { type: "move_result", ok: false, reason: "Pieces on camp (行营) cells are immune to capture." });
+        return;
+      }
 
       let capture = null;
       if (target) {

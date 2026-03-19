@@ -828,6 +828,13 @@ socket.addEventListener("message", (ev) => {
     render();
     return;
   }
+  if (msg.type === "move_result") {
+    if (!msg.ok) {
+      setHint(`⚠ ${msg.reason}`);
+      setTimeout(() => setHint(""), 2500);
+    }
+    return;
+  }
   if (msg.type === "chat") {
     addChatLine(msg);
     return;
