@@ -153,6 +153,11 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.btn.active {
+  background: rgba(124, 58, 237, 0.22);
+  border-color: rgba(124, 58, 237, 0.6);
+  color: rgba(196, 170, 255, 0.95);
+}
 .btn.primary {
   background: rgba(124, 58, 237, 0.28);
   border-color: rgba(124, 58, 237, 0.55);

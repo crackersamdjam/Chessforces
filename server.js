@@ -254,6 +254,7 @@ function roomSnapshotFor(room, viewerId) {
     pieces,
     turnSeat: room.turnSeat,
     lastMove: room.lastMove,
+    gameMode: room.gameMode ?? "ffa",
     winnerTeam: room.winnerTeam ?? null,
     eliminatedSeats: Array.from(room.eliminatedSeats ?? []),
     gameOverReason: room.gameOverReason ?? null
@@ -275,6 +276,7 @@ function getOrCreateRoom(roomId) {
       pieces: new Map(), // pieceId -> {id, ownerId, type, label, rank, pos:{r,c}|null, alive:boolean, flagRevealed:boolean}
       turnSeat: null,
       lastMove: null,
+      gameMode: "ffa", // "ffa" | "2v2"
       winnerTeam: null,
       eliminatedSeats: new Set(),
       gameOverReason: null
@@ -663,8 +665,13 @@ function resolveCapture(attacker, defender) {
   assert(false, "Invalid combat resolution");
 }
 
-// Teams: N+S vs E+W.
-const TEAM_OF = { N: "NS", S: "NS", E: "EW", W: "EW" };
+/** Returns the team identifier for a seat given the current game mode.
+ *  2v2 → "NS" / "EW";  FFA → the seat itself (each player is their own team). */
+function teamOf(room, seat) {
+  if (!seat) return null;
+  if (room.gameMode === "2v2") return { N: "NS", S: "NS", E: "EW", W: "EW" }[seat] ?? seat;
+  return seat;
+}
 
 /** Eliminate a player: mark their pieces dead and record their seat as eliminated. */
 function eliminatePlayer(room, seat) {
@@ -680,6 +687,11 @@ function eliminatePlayer(room, seat) {
   }
 }
 
+/** Returns true if seatA and seatB are on the same side. */
+function isFriendly(room, seatA, seatB) {
+  return seatA != null && seatB != null && teamOf(room, seatA) === teamOf(room, seatB);
+}
+
 /**
  * Returns true if `piece` has at least one legal destination in the current
  * room state.  Respects:
@@ -691,7 +703,6 @@ function canMovePiece(room, piece) {
   if (!piece.alive || !piece.pos || piece.type === "flag" || piece.type === "mine") return false;
   const ownSeat = room.players.get(piece.ownerId)?.seat;
   if (!ownSeat) return false;
-  const ownTeam = TEAM_OF[ownSeat];
   const from = piece.pos;
 
   for (const cell of room.board.cells) {
@@ -711,9 +722,7 @@ function canMovePiece(room, piece) {
     const target = pieceAt(room, to);
     if (target) {
       const targetSeat = room.players.get(target.ownerId)?.seat;
-      // Cannot capture own or teammate's piece.
-      if (targetSeat && TEAM_OF[targetSeat] === ownTeam) continue;
-      // Pieces on camp cells are immune.
+      if (targetSeat && isFriendly(room, ownSeat, targetSeat)) continue;
       if (cell.type === "camp") continue;
     }
 
@@ -746,25 +755,16 @@ function checkEliminations(room) {
 function checkForWin(room) {
   if (room.phase === PHASES.DONE) return;
 
-  const seatedSeats = Array.from(room.seatToPlayerId.keys());
-  const nsSeats = seatedSeats.filter((s) => TEAM_OF[s] === "NS");
-  const ewSeats = seatedSeats.filter((s) => TEAM_OF[s] === "EW");
+  // Collect teams that still have at least one active (non-eliminated) player.
+  const activeTeams = new Set();
+  for (const [seat] of room.seatToPlayerId) {
+    if (!room.eliminatedSeats.has(seat)) activeTeams.add(teamOf(room, seat));
+  }
 
-  const nsElim = nsSeats.length > 0 && nsSeats.every((s) => room.eliminatedSeats.has(s));
-  const ewElim = ewSeats.length > 0 && ewSeats.every((s) => room.eliminatedSeats.has(s));
-
-  if (nsElim && ewElim) {
+  if (activeTeams.size <= 1) {
     room.phase = PHASES.DONE;
-    room.winnerTeam = null; // draw
-    room.gameOverReason = "draw";
-  } else if (nsElim) {
-    room.phase = PHASES.DONE;
-    room.winnerTeam = "EW";
-    room.gameOverReason = "team_eliminated";
-  } else if (ewElim) {
-    room.phase = PHASES.DONE;
-    room.winnerTeam = "NS";
-    room.gameOverReason = "team_eliminated";
+    room.winnerTeam = activeTeams.size === 1 ? [...activeTeams][0] : null;
+    room.gameOverReason = room.winnerTeam ? "winner" : "draw";
   }
 }
 
@@ -845,6 +845,16 @@ wss.on("connection", (ws, req) => {
       return;
     }
 
+    if (msg.type === "set_game_mode") {
+      if (room.phase !== PHASES.LOBBY) return;
+      const mode = String(msg.mode ?? "");
+      if (mode !== "ffa" && mode !== "2v2") return;
+      if (mode === "2v2" && room.seatToPlayerId.size < 4) return;
+      room.gameMode = mode;
+      broadcastState(room);
+      return;
+    }
+
     if (msg.type === "set_ready") {
       const wantsReady = Boolean(msg.ready);
       // Prevent readying up until every piece has been placed.
@@ -904,11 +914,9 @@ wss.on("connection", (ws, req) => {
       if (toCell?.type === "mountain" && piece.type !== "engineer") return; // 山界: engineers only
 
       const target = pieceAt(room, to);
-      if (target && target.ownerId === playerId) return; // can't capture own piece
-      // Can't capture a teammate's piece (N+S or E+W).
       if (target) {
         const targetSeat = room.players.get(target.ownerId)?.seat;
-        if (targetSeat && TEAM_OF[targetSeat] === TEAM_OF[player.seat]) return;
+        if (isFriendly(room, player.seat, targetSeat)) return;
       }
       // Pieces on camp cells are immune to capture.
       if (target && boardCellAt(room.board, to)?.type === "camp") return;
@@ -970,16 +978,28 @@ wss.on("connection", (ws, req) => {
 
   ws.on("close", () => {
     room.players.delete(playerId);
-    if (player.seat) room.seatToPlayerId.delete(player.seat);
-    // Remove pieces owned by player
-    for (const [pid, piece] of room.pieces) {
-      if (piece.ownerId === playerId) room.pieces.delete(pid);
-    }
     room.updatedAt = nowMs();
+
     if (room.players.size === 0) {
       rooms.delete(room.id);
       return;
     }
+
+    if (room.phase === PHASES.PLAY && player.seat) {
+      // Treat a disconnect during the game as an instant elimination.
+      eliminatePlayer(room, player.seat);
+      if (room.turnSeat === player.seat) {
+        room.turnSeat = nextOccupiedSeat(room, player.seat);
+      }
+      checkForWin(room);
+    } else {
+      // Outside of the play phase, simply vacate the seat and remove pieces.
+      if (player.seat) room.seatToPlayerId.delete(player.seat);
+      for (const [pid, piece] of room.pieces) {
+        if (piece.ownerId === playerId) room.pieces.delete(pid);
+      }
+    }
+
     broadcast(room, { type: "presence" });
     for (const [pid] of room.players) {
       safeSend(room.players.get(pid).ws, { type: "state", state: roomSnapshotFor(room, pid) });

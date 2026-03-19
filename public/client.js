@@ -302,14 +302,22 @@ function render() {
     return;
   }
 
+  const me = state.players.find((p) => p.id === app.playerId) || null;
+
   $("phaseLine").textContent = `Phase: ${state.phase}`;
   if (state.phase === "done") {
-    const teamLabels = { NS: "North & South", EW: "East & West" };
-    $("turnLine").textContent = state.winnerTeam
-      ? `Game over. ${teamLabels[state.winnerTeam] ?? state.winnerTeam} wins!`
-      : "Game over. Draw.";
+    if (state.winnerTeam) {
+      const teamLabels = { NS: "North & South", EW: "East & West" };
+      const label = teamLabels[state.winnerTeam] ?? seatLabel(state.winnerTeam);
+      $("turnLine").textContent = `Game over. ${label} wins!`;
+    } else {
+      $("turnLine").textContent = "Game over. Draw.";
+    }
   } else if (state.phase === "play") {
-    $("turnLine").textContent = `Turn: ${state.turnSeat ? seatLabel(state.turnSeat) : "-"}`;
+    const isMyTurn = me?.seat && state.turnSeat === me.seat;
+    $("turnLine").textContent = isMyTurn
+      ? "Your Turn!"
+      : `Turn: ${state.turnSeat ? seatLabel(state.turnSeat) : "-"}`;
   } else {
     $("turnLine").textContent = "";
   }
@@ -321,8 +329,6 @@ function render() {
   renderSeats(state);
   renderBoard(state);
   renderPieces(state);
-
-  const me = state.players.find((p) => p.id === app.playerId) || null;
   const myPieces = state.pieces.filter((p) => isMyPiece(state, p));
   const allMyPiecesPlaced =
     myPieces.length > 0 && myPieces.every((p) => p.pos !== null);
@@ -332,6 +338,13 @@ function render() {
   const inPlay = state.phase === "play" || state.phase === "done";
   const lobbyEl = $("lobbyControls");
   if (lobbyEl) lobbyEl.style.display = inPlay ? "none" : "";
+
+  // Game-mode toggle buttons.
+  const gameMode = state.gameMode ?? "ffa";
+  const seatedCount = state.players.filter((p) => p.seat).length;
+  $("ffaBtn").classList.toggle("active", gameMode === "ffa");
+  $("twov2Btn").classList.toggle("active", gameMode === "2v2");
+  $("twov2Btn").disabled = seatedCount < 4;
 }
 
 function renderSeats(state) {
@@ -442,7 +455,7 @@ function renderPieces(state) {
   const list = $("piecesList");
   if (!list) return;
   list.innerHTML = "";
-  const myPieces = state.pieces.filter((p) => p.ownerSeat && isMineSeat(state, p.ownerSeat));
+  const myPieces = state.pieces.filter((p) => p.ownerSeat && isMySeat(state, p.ownerSeat));
 
   // If you haven't taken a seat yet, you won't have an ownerSeat; instead infer from hidden state:
   // We show "your pieces" by matching the pieces labeled (server already hides others).
@@ -493,7 +506,7 @@ function applyPerspective(state) {
   else if (seat === "W") boardEl.classList.add("board--rotW");
 }
 
-function isMineSeat(state, ownerSeat) {
+function isMySeat(state, ownerSeat) {
   const me = state.players.find((p) => p.id === app.playerId);
   return Boolean(me && me.seat === ownerSeat);
 }
@@ -770,7 +783,7 @@ let autoPlacedSeat = null;
 const socket = new WebSocket(wsUrl);
 
 socket.addEventListener("open", () => {
-  setHint("Pick a seat — pieces will be placed automatically. Click Ready when done.");
+  setHint("Pick a seat — pieces will be placed automatically. Click Ready when done. (Game will start automatically when all present players are ready)");
   render();
 });
 
@@ -810,7 +823,7 @@ socket.addEventListener("message", (ev) => {
     }
     // Show hint on phase transitions.
     if (prevPhase !== msg.state.phase) {
-      if (msg.state.phase === "play") setHint("Game started. Select one of your pieces and move.");
+      if (msg.state.phase === "play") setHint("Game started. On your turn, select one of your pieces and move.");
     }
     render();
     return;
@@ -845,6 +858,8 @@ $("saveNameBtn").addEventListener("click", () => {
   setTimeout(() => setHint(""), 1200);
 });
 
+$("ffaBtn").addEventListener("click", () => send({ type: "set_game_mode", mode: "ffa" }));
+$("twov2Btn").addEventListener("click", () => send({ type: "set_game_mode", mode: "2v2" }));
 $("readyBtn").addEventListener("click", () => send({ type: "set_ready", ready: true }));
 $("unreadyBtn").addEventListener("click", () => send({ type: "set_ready", ready: false }));
 
