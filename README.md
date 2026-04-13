@@ -1,6 +1,8 @@
-# Online 4-player 军棋
+# Chessforces: online 4-player 军棋
 
-This is a minimal “share a link and play in the browser” 军棋 game.
+A minimal browser-based 军棋 game — just share a link and play.
+
+The name comes from Codeforces culture: after a round, people would coin names like *thinkforces*, *speedforces*, or *sleepforces* to capture the flavour of the problems. A "chessforces" round would be one where knowing chess gives you an edge, often saving you the time spent understanding how chess pieces move. I like Chessforces, so now it's the name of this project.
 
 ## Run locally
 
