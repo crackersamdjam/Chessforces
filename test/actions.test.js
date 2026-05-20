@@ -4,7 +4,9 @@ import {
 	applyMove,
 	applyPlacement,
 	checkForWin,
-	PHASES
+	PHASES,
+	resolveGameMode,
+	maybeAdvancePhase
 } from "../lib/game/index.js";
 import {
 	addPlayer,
@@ -13,6 +15,40 @@ import {
 	setPieceAt,
 	setupMinimalGame
 } from "./helpers.js";
+
+describe("game mode", () => {
+	it("resolveGameMode: 2–3 ffa, 4 is 2v2", () => {
+		assert.equal(resolveGameMode(2), "ffa");
+		assert.equal(resolveGameMode(3), "ffa");
+		assert.equal(resolveGameMode(4), "2v2");
+	});
+
+	it("maybeAdvancePhase sets 2v2 when four players start", () => {
+		const room = createTestRoom();
+		for (const seat of ["N", "E", "S", "W"]) {
+			addPlayer(room, { seat, ready: true });
+		}
+		assert.equal(maybeAdvancePhase(room), true);
+		assert.equal(room.gameMode, "2v2");
+		assert.equal(room.phase, PHASES.PLAY);
+	});
+
+	it("maybeAdvancePhase sets ffa when three players start", () => {
+		const room = createTestRoom();
+		for (const seat of ["N", "E", "S"]) {
+			addPlayer(room, { seat, ready: true });
+		}
+		assert.equal(maybeAdvancePhase(room), true);
+		assert.equal(room.gameMode, "ffa");
+	});
+
+	it("gameMode stays fixed after play begins", () => {
+		const room = createTestRoom({ gameMode: "2v2" });
+		setupMinimalGame(room, ["N", "E", "S", "W"]);
+		room.seatToPlayerId.delete("W");
+		assert.equal(room.gameMode, "2v2");
+	});
+});
 
 describe("actions", () => {
 	it("applyPlacement rejects out-of-bounds", () => {

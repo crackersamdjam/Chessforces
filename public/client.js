@@ -52,6 +52,19 @@ function seatLabel(seat) {
 	return `${seat}(${map[seat] ?? seat})`;
 }
 
+function formatGameMode(state) {
+	const seatedCount = state.players.filter((p) => p.seat).length;
+	if (seatedCount < 2) return "Mode: —";
+	const mode =
+		state.phase === "lobby"
+			? seatedCount === 4
+				? "2v2"
+				: "ffa"
+			: state.gameMode ?? "ffa";
+	if (mode === "2v2") return "Mode: 2v2 (N+S vs E+W)";
+	return "Mode: Free-for-all";
+}
+
 function formatTime(ms) {
 	const d = new Date(ms);
 	return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -305,6 +318,8 @@ function render() {
 	const me = state.players.find((p) => p.id === app.playerId) || null;
 
 	$("phaseLine").textContent = `Phase: ${state.phase}`;
+	const modeLine = $("modeLine");
+	if (modeLine) modeLine.textContent = formatGameMode(state);
 	if (state.phase === "done") {
 		if (state.winnerTeam) {
 			const teamLabels = { NS: "North & South", EW: "East & West" };
@@ -337,13 +352,6 @@ function render() {
 	const inPlay = state.phase === "play" || state.phase === "done";
 	const lobbyEl = $("lobbyControls");
 	if (lobbyEl) lobbyEl.style.display = inPlay ? "none" : "";
-
-	// Game-mode toggle buttons.
-	const gameMode = state.gameMode ?? "ffa";
-	const seatedCount = state.players.filter((p) => p.seat).length;
-	$("ffaBtn").classList.toggle("active", gameMode === "ffa");
-	$("twov2Btn").classList.toggle("active", gameMode === "2v2");
-	$("twov2Btn").disabled = seatedCount < 4;
 }
 
 function renderSeats(state) {
@@ -804,8 +812,6 @@ $("saveNameBtn").addEventListener("click", () => {
 	setTimeout(() => setHint(""), 1200);
 });
 
-$("ffaBtn").addEventListener("click", () => send({ type: "set_game_mode", mode: "ffa" }));
-$("twov2Btn").addEventListener("click", () => send({ type: "set_game_mode", mode: "2v2" }));
 $("readyBtn").addEventListener("click", () => send({ type: "set_ready", ready: true }));
 $("unreadyBtn").addEventListener("click", () => send({ type: "set_ready", ready: false }));
 

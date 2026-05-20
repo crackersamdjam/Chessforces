@@ -303,6 +303,8 @@ async function run() {
 		await waitForPlacementComplete(players[i].page, seats[i]);
 	}
 
+	await Promise.all(players.map((p) => expectText(p.page, "#modeLine", /2v2/)));
+
 	// Manually shuffle a few pieces in each home zone before readying up.
 	for (let i = 0; i < players.length; i++) {
 		await shufflePlacement(players[i].page, seats[i], 3);

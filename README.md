@@ -26,6 +26,8 @@ Then open:
 
 Share the room URL with friends. Up to 4 players can join.
 
+**Game mode** is set when the game starts from how many players are seated: **free-for-all** with 2–3, **2v2** (N+S vs E+W) with 4. The lobby previews the mode from the current seat count; there is no manual toggle.
+
 ## How to play (simple)
 
 - Pick a seat (N/E/S/W)

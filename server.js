@@ -151,16 +151,6 @@ wss.on("connection", (ws, req) => {
 			return;
 		}
 
-		if (msg.type === "set_game_mode") {
-			if (room.phase !== PHASES.LOBBY) return;
-			const mode = String(msg.mode ?? "");
-			if (mode !== "ffa" && mode !== "2v2") return;
-			if (mode === "2v2" && room.seatToPlayerId.size < 4) return;
-			room.gameMode = mode;
-			broadcastState(room);
-			return;
-		}
-
 		if (msg.type === "set_ready") {
 			const wantsReady = Boolean(msg.ready);
 			if (wantsReady && !allPiecesPlaced(room, playerId)) return;
