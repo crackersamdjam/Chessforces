@@ -10,6 +10,7 @@ import {
 } from "../lib/game/index.js";
 import {
 	addPlayer,
+	assertPos,
 	createTestRoom,
 	findPiece,
 	setPieceAt,
@@ -151,8 +152,3 @@ describe("actions", () => {
 		assert.equal(room.winnerTeam, "NS");
 	});
 });
-
-function assertPos(piece, r, c) {
-	assert.equal(piece.pos?.r, r);
-	assert.equal(piece.pos?.c, c);
-}

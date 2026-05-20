@@ -4,7 +4,7 @@ import {
 	isValidRailwayMove,
 	isValidRoadStep
 } from "../lib/game/index.js";
-import { addPlayer, createTestRoom, findPiece, setPieceAt } from "./helpers.js";
+import { addPlayer, createTestRoom, setPieceAt } from "./helpers.js";
 
 describe("movement", () => {
 	it("allows orthogonal road step", () => {

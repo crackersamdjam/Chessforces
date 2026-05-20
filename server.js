@@ -10,7 +10,6 @@ import {
 	applyMove,
 	applyPlacement,
 	allPiecesPlaced,
-	chooseSeat,
 	createRoom,
 	eliminatePlayer,
 	ensurePieceSet,
@@ -39,7 +38,7 @@ app.use(express.static(publicDir, {
 	}
 }));
 
-app.get(["/", "/room/:roomId"], (req, res) => {
+app.get(["/", "/room/:roomId"], (_req, res) => {
 	res.sendFile(path.join(publicDir, "index.html"));
 });
 
