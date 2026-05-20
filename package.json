@@ -1,18 +1,20 @@
 {
-  "name": "chessforces",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "nanoid": "^5.1.0",
-    "ws": "^8.18.3"
-  },
-  "devDependencies": {
-    "playwright": "^1.58.2"
-  }
+	"name": "chessforces",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"dev": "node server.js",
+		"start": "node server.js",
+		"test": "node --test test/board.test.js test/placement.test.js test/combat.test.js test/movement.test.js test/actions.test.js",
+		"test:e2e": "node smoke-playwright.mjs"
+	},
+	"dependencies": {
+		"express": "^4.19.2",
+		"nanoid": "^5.1.0",
+		"ws": "^8.18.3"
+	},
+	"devDependencies": {
+		"playwright": "^1.58.2"
+	}
 }

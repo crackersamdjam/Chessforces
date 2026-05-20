@@ -4,6 +4,14 @@ A minimal browser-based 军棋 game — just share a link and play.
 
 The name comes from Codeforces culture: after a round, people would coin names like *thinkforces*, *speedforces*, or *sleepforces* to capture the flavour of the problems. A "chessforces" round would be one where knowing chess gives you an edge, often saving you the time spent understanding how chess pieces move. I like Chessforces, so now it's the name of this project.
 
+## Tech stack
+
+- **Runtime**: Node.js
+- **Server**: [Express](https://expressjs.com/) for static files and HTTP; [ws](https://github.com/websockets/ws) for real-time room sync
+- **Client**: vanilla HTML, CSS, and JS
+- **IDs**: [nanoid](https://github.com/ai/nanoid) for room links
+- **Tests**: Node.js built-in test runner; [Playwright](https://playwright.dev/) for end-to-end smoke tests
+
 ## Run locally
 
 ```bash
@@ -23,18 +31,18 @@ Share the room URL with friends. Up to 4 players can join.
 - Pick a seat (N/E/S/W)
 - Click **Ready**
 - Placement phase: select a piece on the right, then click a board cell to place it
-  - (In this demo you only need to place at least 1 piece to start)
+	- (In this demo you only need to place at least 1 piece to start)
 - Play phase:
-  - Select one of your pieces
-  - Click an adjacent cell to move
+	- Select one of your pieces
+	- Click an adjacent cell to move
 
 ## Notes
 
 - Rooms are stored **in memory** (server restart resets everything)
 - Good enough for LAN / small friend games. For internet hosting + persistence, we can add:
-  - HTTPS + reverse proxy
-  - Redis room storage
-  - Full 军棋 board + movement rules + ranks + win conditions
+	- HTTPS + reverse proxy
+	- Redis room storage
+	- Full 军棋 board + movement rules + ranks + win conditions
 
 ## Rules
 
@@ -54,12 +62,12 @@ The board is a 17×17 grid in a cross (+) shape:
 
 Each player occupies one arm of the cross:
 
-| Seat | Rows   | Cols  | Back (HQ) | Front (toward center) |
+| Seat | Rows		| Cols	| Back (HQ) | Front (toward center) |
 |------|--------|-------|-----------|------------------------|
-| N    | 0–5    | 6–10  | row 0     | row 5                  |
-| S    | 11–16  | 6–10  | row 16    | row 11                 |
-| W    | 6–10   | 0–5   | col 0     | col 5                  |
-| E    | 6–10   | 11–16 | col 16    | col 11                 |
+| N		 | 0–5		| 6–10	| row 0			| row 5									 |
+| S		 | 11–16	| 6–10	| row 16		| row 11								 |
+| W		 | 6–10		| 0–5		| col 0			| col 5									 |
+| E		 | 6–10		| 11–16 | col 16		| col 11								 |
 
 The **center** (rows 6–10, cols 6–10) is shared battle territory belonging to no player.
 
@@ -76,20 +84,20 @@ The **center** (rows 6–10, cols 6–10) is shared battle territory belonging t
 
 Each player has **25 pieces**:
 
-| Piece        | Chinese | Notation | Rank | Count | Notes                                  |
+| Piece				 | Chinese | Notation | Rank | Count | Notes																	|
 |--------------|---------|----------|------|-------|----------------------------------------|
-| Marshal      | 司令    | 40       | 9    | 1     | Highest-ranked officer                 |
-| General      | 军长    | 39       | 8    | 1     |                                        |
-| Major General| 师长    | 38       | 7    | 2     |                                        |
-| Brigadier    | 旅长    | 37       | 6    | 2     |                                        |
-| Colonel      | 团长    | 36       | 5    | 2     |                                        |
-| Major        | 营长    | 35       | 4    | 2     |                                        |
-| Captain      | 连长    | 34       | 3    | 3     |                                        |
-| Lieutenant   | 排长    | 33       | 2    | 3     |                                        |
-| Engineer     | 工兵    | 1        | 1    | 3     | Lowest rank; special railway movement and mine-clearing |
-| Bomb         | 炸弹    | 0        | —    | 2     | Destroys any piece it attacks or is attacked by |
-| Mine         | 地雷    | X        | —    | 3     | Immovable; destroys attackers (except Engineers) |
-| Flag         | 军旗    | $        | —    | 1     | Immovable; capturing it eliminates that player |
+| Marshal			 | 司令		 | 40				| 9		 | 1		 | Highest-ranked officer									|
+| General			 | 军长		 | 39				| 8		 | 1		 |																				|
+| Major General| 师长		 | 38				| 7		 | 2		 |																				|
+| Brigadier		 | 旅长		 | 37				| 6		 | 2		 |																				|
+| Colonel			 | 团长		 | 36				| 5		 | 2		 |																				|
+| Major				 | 营长		 | 35				| 4		 | 2		 |																				|
+| Captain			 | 连长		 | 34				| 3		 | 3		 |																				|
+| Lieutenant	 | 排长		 | 33				| 2		 | 3		 |																				|
+| Engineer		 | 工兵		 | 1				| 1		 | 3		 | Lowest rank; special railway movement and mine-clearing |
+| Bomb				 | 炸弹		 | 0				| —		 | 2		 | Destroys any piece it attacks or is attacked by |
+| Mine				 | 地雷		 | X				| —		 | 3		 | Immovable; destroys attackers (except Engineers) |
+| Flag				 | 军旗		 | $				| —		 | 1		 | Immovable; capturing it eliminates that player |
 
 ---
 
@@ -142,15 +150,15 @@ Pieces **may not move** through occupied cells (they stop at the blocker or cann
 
 When a moving piece enters a cell occupied by an **enemy** piece, combat is resolved immediately:
 
-| Situation                          | Result                                              |
+| Situation													 | Result																							 |
 |------------------------------------|-----------------------------------------------------|
-| Attacker rank > Defender rank      | Defender removed; attacker occupies the cell        |
-| Attacker rank < Defender rank      | Attacker removed; defender stays                    |
-| Equal ranks                        | Both pieces removed                                 |
-| Any piece attacks a **Mine**       | Attacker removed; Mine also removed                 |
-| **Engineer** attacks a Mine        | Mine cleared (removed); Engineer survives and moves there |
-| Either piece is a **Bomb**         | Both pieces removed                                 |
-| Any piece captures the **Flag**    | Flag owner is eliminated; attacker survives         |
+| Attacker rank > Defender rank			 | Defender removed; attacker occupies the cell				 |
+| Attacker rank < Defender rank			 | Attacker removed; defender stays										 |
+| Equal ranks												 | Both pieces removed																 |
+| Any piece attacks a **Mine**			 | Attacker removed; Mine stays												 |
+| **Engineer** attacks a Mine				 | Mine cleared (removed); Engineer survives and moves there |
+| Either piece is a **Bomb**				 | Both pieces removed																 |
+| Any piece captures the **Flag**		 | Flag owner is eliminated; attacker survives				 |
 
 **You may never attack your own pieces.**
 
@@ -166,13 +174,13 @@ The last player whose Flag is still alive wins. A player is **eliminated** as so
 
 ### Special rules summary
 
-| Rule              | Detail                                                                                     |
+| Rule							| Detail																																										 |
 |-------------------|--------------------------------------------------------------------------------------------|
-| Hidden information | You only see your own piece labels; opponents' pieces show "?" until revealed in combat    |
-| Camp immunity      | A piece resting on a Camp cell cannot be captured; it can move out voluntarily             |
-| Mine placement     | Mines must stay in the back two rows/cols; they cannot move under any circumstances         |
-| Bomb movement      | Bombs cannot be placed on the front row/col during setup, but **can move** freely (road or railway) once the game begins |
+| Hidden information | You only see your own piece labels; opponents' pieces show "?" until revealed in combat		|
+| Camp immunity			 | A piece resting on a Camp cell cannot be captured; it can move out voluntarily							|
+| Mine placement		 | Mines must stay in the back two rows/cols; they cannot move under any circumstances				 |
+| Bomb movement			 | Bombs cannot be placed on the front row/col during setup, but **can move** freely (road or railway) once the game begins |
 | Engineer on railway| Engineers navigate the full railway network with free turns and are the only pieces that can enter 山界 Mountain cells |
-| Mountain (山界)    | 4 cells at the inner corners of the center zone; Engineers may step onto them from an adjacent railway cell, and step back off onto any adjacent unblocked railway cell |
-| Turn skip          | Empty seats (players who haven't joined or have disconnected) are skipped automatically    |
+| Mountain (山界)		 | 4 cells at the inner corners of the center zone; Engineers may step onto them from an adjacent railway cell, and step back off onto any adjacent unblocked railway cell |
+| Turn skip					 | Empty seats (players who haven't joined or have disconnected) are skipped automatically		|
 
