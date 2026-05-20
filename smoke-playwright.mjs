@@ -91,8 +91,7 @@ async function findPlacementSwaps(page, seat, limit = 12) {
 				if (r < zone.minR || r > zone.maxR || c < zone.minC || c > zone.maxC) continue;
 				const token = cell.querySelector(".token");
 				if (!token) continue;
-				const owner = token.querySelector(".owner")?.textContent ?? "";
-				if (!owner.startsWith(seat)) continue;
+				if (!token.classList.contains(`token--seat-${seat}`)) continue;
 				const label = token.querySelector(".label")?.textContent ?? "";
 				if (immobile(label)) continue;
 				owned.push({ r, c });
@@ -171,8 +170,7 @@ async function findPlayMoves(page, seat, limit = 24) {
 			for (const cell of document.querySelectorAll(".cell[data-r][data-c]")) {
 				const token = cell.querySelector(".token");
 				if (!token) continue;
-				const owner = token.querySelector(".owner")?.textContent ?? "";
-				if (!owner.startsWith(seat)) continue;
+				if (!token.classList.contains(`token--seat-${seat}`)) continue;
 				const label = token.querySelector(".label")?.textContent ?? "";
 				if (blocked(label)) continue;
 				const r = Number(cell.dataset.r);

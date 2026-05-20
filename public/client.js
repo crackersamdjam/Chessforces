@@ -68,7 +68,7 @@ function ensureSeatViews() {
 
 	for (const seat of app.seats) {
 		const card = document.createElement("div");
-		card.className = "seatCard";
+		card.className = `seatCard seatCard--${seat}`;
 
 		const seatTop = document.createElement("div");
 		seatTop.className = "seatTop";
@@ -411,51 +411,13 @@ function renderBoard(state) {
 		if (!piece) continue;
 		const token = document.createElement("div");
 		token.className = "token";
+		if (piece.ownerSeat) token.classList.add(`token--seat-${piece.ownerSeat}`);
+		if (isMyPiece(state, piece)) token.classList.add("token--mine");
 		if (piece.id === selectedPieceId) token.classList.add("selected");
 		if (piece.flagRevealed) token.classList.add("token--revealed");
-		const coord = formatSideCoord(piece);
-		token.innerHTML = `
-			<div class="label">${escapeHtml(piece.label)}</div>
-			<div class="owner">${piece.ownerSeat ?? "?"}${
-				coord ? ` · ${escapeHtml(coord)}` : ""
-			}</div>
-		`;
+		token.innerHTML = `<div class="label">${escapeHtml(piece.label)}</div>`;
 		host.appendChild(token);
 	}
-}
-
-function formatSideCoord(piece) {
-	if (!piece.pos || !piece.ownerSeat) return "";
-	const sideMap = { N: "A", E: "B", S: "C", W: "D" };
-	const side = sideMap[piece.ownerSeat];
-	if (!side) return "";
-	// Center of the 17×17 cross board.
-	const centerR = 8;
-	const centerC = 8;
-	const dx = piece.pos.c - centerC;
-	const dy = piece.pos.r - centerR; // down is positive
-
-	let x = 0;
-	let y = 0;
-	if (side === "A") {
-		// N at top: y increases away from center toward N's back
-		x = dx;
-		y = -dy;
-	} else if (side === "C") {
-		// S at bottom
-		x = -dx;
-		y = dy;
-	} else if (side === "B") {
-		// E on right
-		x = dy;
-		y = dx;
-	} else if (side === "D") {
-		// W on left
-		x = -dy;
-		y = -dx;
-	}
-
-	return `${side}(${x},${y})`;
 }
 
 function applyPerspective(state) {

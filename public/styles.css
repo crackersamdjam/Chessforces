@@ -8,6 +8,12 @@
 	--accent: #7c3aed;
 	--accent2: #22c55e;
 	--danger: #ef4444;
+	--board-cell-bg: #111827;
+	--seat-N-color: rgb(56, 189, 248);
+	--seat-E-color: rgb(251, 113, 133);
+	--seat-S-color: rgb(251, 146, 60);
+	--seat-W-color: rgb(45, 212, 191);
+	--revealed-color: rgb(251, 191, 36);
 }
 
 * {
@@ -187,6 +193,14 @@ body {
 	border-radius: 12px;
 	background: rgba(0, 0, 0, 0.18);
 }
+.seatCard--N { border-color: color-mix(in srgb, var(--seat-N-color) 45%, var(--board-cell-bg)); }
+.seatCard--E { border-color: color-mix(in srgb, var(--seat-E-color) 45%, var(--board-cell-bg)); }
+.seatCard--S { border-color: color-mix(in srgb, var(--seat-S-color) 45%, var(--board-cell-bg)); }
+.seatCard--W { border-color: color-mix(in srgb, var(--seat-W-color) 45%, var(--board-cell-bg)); }
+.seatCard--N .seatName { color: color-mix(in srgb, var(--seat-N-color) 95%, var(--board-cell-bg)); }
+.seatCard--E .seatName { color: color-mix(in srgb, var(--seat-E-color) 95%, var(--board-cell-bg)); }
+.seatCard--S .seatName { color: color-mix(in srgb, var(--seat-S-color) 95%, var(--board-cell-bg)); }
+.seatCard--W .seatName { color: color-mix(in srgb, var(--seat-W-color) 95%, var(--board-cell-bg)); }
 .seatTop {
 	display: flex;
 	justify-content: space-between;
@@ -355,6 +369,7 @@ body.debug .cellCoord {
 
 .token {
 	width: 100%;
+	height: 75%;
 	border-radius: 6px;
 	border: 1px solid rgba(255, 255, 255, 0.16);
 	padding: 3px 5px;
@@ -362,25 +377,41 @@ body.debug .cellCoord {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	justify-content: center;
 	gap: 1px;
 }
+.token--seat-N {
+	background: color-mix(in srgb, var(--seat-N-color) 14%, var(--board-cell-bg));
+	border-color: color-mix(in srgb, var(--seat-N-color) 70%, var(--board-cell-bg));
+}
+.token--seat-E {
+	background: color-mix(in srgb, var(--seat-E-color) 14%, var(--board-cell-bg));
+	border-color: color-mix(in srgb, var(--seat-E-color) 70%, var(--board-cell-bg));
+}
+.token--seat-S {
+	background: color-mix(in srgb, var(--seat-S-color) 14%, var(--board-cell-bg));
+	border-color: color-mix(in srgb, var(--seat-S-color) 70%, var(--board-cell-bg));
+}
+.token--seat-W {
+	background: color-mix(in srgb, var(--seat-W-color) 14%, var(--board-cell-bg));
+	border-color: color-mix(in srgb, var(--seat-W-color) 70%, var(--board-cell-bg));
+}
+.token--seat-N.token--mine { background: color-mix(in srgb, var(--seat-N-color) 22%, var(--board-cell-bg)); }
+.token--seat-E.token--mine { background: color-mix(in srgb, var(--seat-E-color) 22%, var(--board-cell-bg)); }
+.token--seat-S.token--mine { background: color-mix(in srgb, var(--seat-S-color) 22%, var(--board-cell-bg)); }
+.token--seat-W.token--mine { background: color-mix(in srgb, var(--seat-W-color) 22%, var(--board-cell-bg)); }
 .token .label {
 	margin: 0;
 	font-size: 10px;
 	color: var(--text);
 	white-space: nowrap;
 }
-.token .owner {
-	font-size: 9px;
-	color: var(--muted);
-	white-space: nowrap;
-}
 .token.selected {
 	outline: 2px solid rgba(124, 58, 237, 0.75);
 }
 .token--revealed {
-	border-color: rgba(251, 191, 36, 0.8);
-	background: rgba(251, 191, 36, 0.12);
+	border-color: color-mix(in srgb, var(--revealed-color) 80%, var(--board-cell-bg));
+	background: color-mix(in srgb, var(--revealed-color) 12%, var(--board-cell-bg));
 }
 
 .chatLog {
