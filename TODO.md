@@ -1,2 +1,2 @@
 - Add colour tint for each player, so that pieces can easily be told apart
-- Highlight the previous move, a yellow border around the piece's old position
+- remove the "your pieces" list during placement. it takes up too much space and isn't useful

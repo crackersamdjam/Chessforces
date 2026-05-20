@@ -397,7 +397,15 @@ function renderBoard(state) {
 		pieceByCell.set(`${piece.pos.r},${piece.pos.c}`, piece);
 	}
 
+	const lastMove = state.lastMove;
+	const lastFromKey = lastMove?.from ? `${lastMove.from.r},${lastMove.from.c}` : null;
+	const lastToKey = lastMove?.to ? `${lastMove.to.r},${lastMove.to.c}` : null;
+
 	for (const [key, view] of boardViews) {
+		view.cell.classList.remove("cell--lastFrom", "cell--lastTo");
+		if (key === lastFromKey) view.cell.classList.add("cell--lastFrom");
+		if (key === lastToKey) view.cell.classList.add("cell--lastTo");
+
 		const piece = pieceByCell.get(key) || null;
 		const host = view.tokenHost;
 		host.innerHTML = "";
