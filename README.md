@@ -30,7 +30,7 @@ Share the room URL with friends. Up to 4 players can join.
 
 - Pick a seat (N/E/S/W)
 - Click **Ready**
-- Placement phase: select a piece on the right, then click a board cell to place it
+- Placement phase: click one of your pieces on the board, then click a cell to place or swap
 	- (In this demo you only need to place at least 1 piece to start)
 - Play phase:
 	- Select one of your pieces

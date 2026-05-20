@@ -42,7 +42,6 @@ async function waitForReadyEnabled(page, timeout = 30_000) {
 
 /** Wait for take_seat + randomize to finish; retry Random setup if needed. */
 async function waitForPlacementComplete(page, seat, timeout = 60_000) {
-	await page.waitForSelector("#piecesList .pieceBtn", { timeout: 15_000 });
 	const deadline = Date.now() + timeout;
 	while (Date.now() < deadline) {
 		const ready = await page.evaluate(() => {

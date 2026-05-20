@@ -328,7 +328,6 @@ function render() {
 
 	renderSeats(state);
 	renderBoard(state);
-	renderPieces(state);
 	const myPieces = state.pieces.filter((p) => isMyPiece(state, p));
 	const allMyPiecesPlaced =
 		myPieces.length > 0 && myPieces.every((p) => p.pos !== null);
@@ -459,50 +458,6 @@ function formatSideCoord(piece) {
 	return `${side}(${x},${y})`;
 }
 
-function renderPieces(state) {
-	const list = $("piecesList");
-	if (!list) return;
-	list.innerHTML = "";
-	const myPieces = state.pieces.filter((p) => p.ownerSeat && isMySeat(state, p.ownerSeat));
-
-	// If you haven't taken a seat yet, you won't have an ownerSeat; instead infer from hidden state:
-	// We show "your pieces" by matching the pieces labeled (server already hides others).
-	const mine = state.pieces.filter((p) => p.label !== "?" && isMyPiece(state, p));
-	const pieces = mine.sort((a, b) => a.label.localeCompare(b.label, "zh"));
-
-	if (!pieces.length) {
-		const empty = document.createElement("div");
-		empty.className = "muted";
-		empty.textContent = "Take a seat to get your pieces.";
-		list.appendChild(empty);
-		return;
-	}
-
-	for (const p of pieces) {
-		const btn = document.createElement("button");
-		btn.className = "pieceBtn";
-		if (p.id === selectedPieceId) btn.classList.add("selected");
-		const posText = p.pos ? `@ ${p.pos.r},${p.pos.c}` : "(unplaced)";
-		btn.innerHTML = `
-			<div style="font-weight:650;">${escapeHtml(p.label)}</div>
-			<div class="pieceMeta"><div>${posText}</div></div>
-		`;
-		btn.addEventListener("click", () => {
-			selectedPieceId = selectedPieceId === p.id ? null : p.id;
-			if (selectedPieceId) {
-				const ph = state.phase;
-				setHint(ph === "play"
-					? "Click a destination cell to move."
-					: "Click a cell to place, or another piece to swap.");
-			} else {
-				setHint("");
-			}
-			render();
-		});
-		list.appendChild(btn);
-	}
-}
-
 function applyPerspective(state) {
 	const boardEl = $("board");
 	if (!boardEl) return;
@@ -512,11 +467,6 @@ function applyPerspective(state) {
 	if (seat === "N") boardEl.classList.add("board--rotN");
 	else if (seat === "E") boardEl.classList.add("board--rotE");
 	else if (seat === "W") boardEl.classList.add("board--rotW");
-}
-
-function isMySeat(state, ownerSeat) {
-	const me = state.players.find((p) => p.id === app.playerId);
-	return Boolean(me && me.seat === ownerSeat);
 }
 
 function isMyPiece(state, piece) {
