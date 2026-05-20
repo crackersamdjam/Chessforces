@@ -678,6 +678,7 @@ const HOME_ZONES = {
 };
 
 function randomizePlacement() {
+	if (randomizeInFlight) return;
 	const state = app.state;
 	if (!state) return;
 	if (state.phase !== "lobby") {
@@ -693,11 +694,16 @@ function randomizePlacement() {
 	}
 
 	const pieces = state.pieces.filter((p) => p.label !== "?" && isMyPiece(state, p));
-	if (!pieces.length) return;
+	if (!pieces.length) {
+		scheduleAutoRandomize();
+		return;
+	}
 
 	const zone = HOME_ZONES[me.seat];
 	if (!zone) return;
 
+	randomizeInFlight = true;
+	try {
 	// Unplace all of my currently placed pieces so the server accepts re-placement.
 	for (const p of pieces) {
 		if (p.pos) send({ type: "place_piece", pieceId: p.id, pos: null });
@@ -775,10 +781,23 @@ function randomizePlacement() {
 
 	setHint("Board randomized.");
 	setTimeout(() => setHint(""), 1400);
+	} finally {
+		randomizeInFlight = false;
+	}
 }
 
 // Track which seat we've already auto-placed for, so we only do it once.
 let autoPlacedSeat = null;
+let autoRandomizeTimer = null;
+let randomizeInFlight = false;
+
+function scheduleAutoRandomize() {
+	clearTimeout(autoRandomizeTimer);
+	autoRandomizeTimer = setTimeout(() => {
+		autoRandomizeTimer = null;
+		randomizePlacement();
+	}, 250);
+}
 
 const socket = new WebSocket(wsUrl);
 
@@ -818,7 +837,7 @@ socket.addEventListener("message", (ev) => {
 			const me = msg.state.players.find((p) => p.id === app.playerId);
 			if (me?.seat && me.seat !== autoPlacedSeat) {
 				autoPlacedSeat = me.seat;
-				setTimeout(() => randomizePlacement(), 150);
+				scheduleAutoRandomize();
 			}
 		}
 		// Show hint on phase transitions.
@@ -882,7 +901,11 @@ $("chatInput").addEventListener("keydown", (e) => {
 	if (e.key === "Enter") sendChat();
 });
 
-$("randomizeBtn").addEventListener("click", randomizePlacement);
+$("randomizeBtn").addEventListener("click", () => {
+	clearTimeout(autoRandomizeTimer);
+	autoRandomizeTimer = null;
+	randomizePlacement();
+});
 
 $("debugBtn").addEventListener("click", () => {
 	document.body.classList.toggle("debug");
