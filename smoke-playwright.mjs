@@ -15,6 +15,8 @@ async function run() {
 	const errors = [];
 
 	const { roomUrl, players, seats } = await setup2v2Lobby(browser, errors);
+	// eslint-disable-next-line no-console
+	console.info(`smoke-playwright: open in browser while running → ${roomUrl}`);
 
 	// Manually shuffle a few pieces in each home zone before readying up.
 	for (let i = 0; i < players.length; i++) {
