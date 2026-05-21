@@ -13,7 +13,6 @@
 	--seat-E-color: rgb(251, 113, 133);
 	--seat-S-color: rgb(251, 146, 60);
 	--seat-W-color: rgb(45, 212, 191);
-	--revealed-color: rgb(251, 191, 36);
 }
 
 * {
@@ -425,10 +424,6 @@ body.debug .cellCoord {
 }
 .token.selected {
 	outline: 2px solid rgba(124, 58, 237, 0.75);
-}
-.token--revealed {
-	border-color: color-mix(in srgb, var(--revealed-color) 80%, var(--board-cell-bg));
-	background: color-mix(in srgb, var(--revealed-color) 12%, var(--board-cell-bg));
 }
 
 .chatLog {

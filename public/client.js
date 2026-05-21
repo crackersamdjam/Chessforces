@@ -422,7 +422,6 @@ function renderBoard(state) {
 		if (piece.ownerSeat) token.classList.add(`token--seat-${piece.ownerSeat}`);
 		if (isMyPiece(state, piece)) token.classList.add("token--mine");
 		if (piece.id === selectedPieceId) token.classList.add("selected");
-		if (piece.flagRevealed) token.classList.add("token--revealed");
 		token.innerHTML = `<div class="label">${escapeHtml(piece.label)}</div>`;
 		host.appendChild(token);
 	}
