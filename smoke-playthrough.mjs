@@ -1,3 +1,8 @@
+/**
+ * Browser E2E: four clients, lobby randomize, full 2v2 until game over.
+ * For rules, moves, combat, and win conditions use test/playthrough.test.js
+ * (lib/game, no Playwright) — do not add more smoke tests for game logic.
+ */
 import { chromium } from "playwright";
 import {
 	assert,
@@ -15,20 +20,28 @@ const GAME_TIMEOUT_MS = 120_000; // two minutes
 
 const ENEMY_HQ = {
 	N: [
-		{ r: 8, c: 0 },
-		{ r: 8, c: 16 }
+		{ r: 7, c: 0 },
+		{ r: 9, c: 0 },
+		{ r: 7, c: 16 },
+		{ r: 9, c: 16 }
 	],
 	S: [
-		{ r: 8, c: 0 },
-		{ r: 8, c: 16 }
+		{ r: 7, c: 0 },
+		{ r: 9, c: 0 },
+		{ r: 7, c: 16 },
+		{ r: 9, c: 16 }
 	],
 	E: [
-		{ r: 0, c: 8 },
-		{ r: 16, c: 8 }
+		{ r: 0, c: 7 },
+		{ r: 0, c: 9 },
+		{ r: 16, c: 7 },
+		{ r: 16, c: 9 }
 	],
 	W: [
-		{ r: 0, c: 8 },
-		{ r: 16, c: 8 }
+		{ r: 0, c: 7 },
+		{ r: 0, c: 9 },
+		{ r: 16, c: 7 },
+		{ r: 16, c: 9 }
 	]
 };
 
@@ -158,6 +171,10 @@ async function isGameDone(page) {
 }
 
 async function run() {
+	// eslint-disable-next-line no-console
+	console.info(
+		"smoke-playthrough: UI only. Game logic playthroughs belong in test/playthrough.test.js (npm test)."
+	);
 	const browser = await chromium.launch();
 	const errors = [];
 
@@ -201,7 +218,7 @@ async function run() {
 	);
 
 	const outcome = await players[0].page.evaluate(() => ({
-		turnLine: document.querySelector("#turnLine")?.textContent ?? "",
+		terminationReason: (document.querySelector("#turnLine")?.textContent ?? "").trim(),
 		modeLine: document.querySelector("#modeLine")?.textContent ?? ""
 	}));
 
@@ -211,6 +228,11 @@ async function run() {
 
 run()
 	.then((r) => {
+		const reason = r.outcome?.terminationReason ?? "";
+		// eslint-disable-next-line no-console
+		console.log(
+			`smoke-playthrough: done after ${r.moves} moves — ${reason || "(no termination reason)"}`
+		);
 		// eslint-disable-next-line no-console
 		console.log(JSON.stringify({ ok: true, ...r }, null, 2));
 		process.exitCode = r.errors?.length ? 2 : 0;
