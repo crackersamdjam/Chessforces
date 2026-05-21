@@ -16,7 +16,10 @@ import {
 	maybeAdvancePhase,
 	nextOccupiedSeat,
 	checkForWin,
-	roomSnapshotFor
+	roomSnapshotFor,
+	applySetupToRoom,
+	exportSetup,
+	exportGame
 } from "./lib/game/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,7 +41,7 @@ app.use(express.static(publicDir, {
 	}
 }));
 
-app.get(["/", "/room/:roomId"], (_req, res) => {
+app.get(["/", "/room/:roomId", "/playback"], (_req, res) => {
 	res.sendFile(path.join(publicDir, "index.html"));
 });
 
@@ -115,7 +118,7 @@ wss.on("connection", (ws, req) => {
 
 		if (msg.type === "set_name") {
 			player.name = String(msg.name ?? "").slice(0, 24) || player.name;
-			broadcast(room, { type: "state", state: roomSnapshotFor(room, playerId) });
+			broadcastState(room);
 			return;
 		}
 
@@ -199,6 +202,46 @@ wss.on("connection", (ws, req) => {
 				text,
 				at: nowMs()
 			});
+			return;
+		}
+
+		if (msg.type === "export_setup") {
+			if (room.phase !== PHASES.LOBBY) {
+				safeSend(ws, { type: "setup_file", ok: false, reason: "Setup export is only available in the lobby." });
+				return;
+			}
+			for (const seat of SEATS) {
+				const seatPlayerId = room.seatToPlayerId.get(seat);
+				if (!seatPlayerId) {
+					safeSend(ws, { type: "setup_file", ok: false, reason: "All four seats must be occupied." });
+					return;
+				}
+				if (!allPiecesPlaced(room, seatPlayerId)) {
+					safeSend(ws, { type: "setup_file", ok: false, reason: "All pieces must be placed before setup export." });
+					return;
+				}
+			}
+			safeSend(ws, { type: "setup_file", ok: true, setup: exportSetup(room) });
+			return;
+		}
+
+		if (msg.type === "import_setup") {
+			const result = applySetupToRoom(room, msg.setup ?? null);
+			if (!result.ok) {
+				safeSend(ws, { type: "import_setup_result", ok: false, reason: result.reason });
+				return;
+			}
+			broadcastState(room);
+			safeSend(ws, { type: "import_setup_result", ok: true });
+			return;
+		}
+
+		if (msg.type === "export_game") {
+			if (room.phase !== PHASES.DONE) {
+				safeSend(ws, { type: "game_file", ok: false, reason: "Game export is only available after the game ends." });
+				return;
+			}
+			safeSend(ws, { type: "game_file", ok: true, game: exportGame(room) });
 			return;
 		}
 	});
