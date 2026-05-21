@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
+import { randomInt } from "node:crypto";
 import {
+	applyMove,
+	applyPlacement,
 	createRoom,
 	ensurePieceSet,
+	findLegalPlayMoves,
 	isHQCell,
+	maybeAdvancePhase,
 	PHASES,
 	SEATS,
 	startGame
 } from "../lib/game/index.js";
+import { homeInfoForSeat } from "../lib/game/placement.js";
 
 let nextId = 0;
 
@@ -91,4 +97,111 @@ export function makePiece(id, type, rank = null, overrides = {}) {
 		flagRevealed: false,
 		...overrides
 	};
+}
+
+function sortCells(cells) {
+	return [...cells].sort((a, b) => a.r - b.r || a.c - b.c);
+}
+
+/** Legal placement (mirrors client randomize cell rules). */
+export function placePlayerPieces(room, playerId, seat) {
+	const pick = (arr) => arr[randomInt(arr.length)];
+	const info = homeInfoForSeat(room.board, seat);
+	if (!info) throw new Error(`No home zone for seat ${seat}`);
+
+	const allHomeCells = room.board.cells.filter(
+		(cell) =>
+			cell.r >= info.minR &&
+			cell.r <= info.maxR &&
+			cell.c >= info.minC &&
+			cell.c <= info.maxC &&
+			cell.type !== "inactive"
+	);
+	const postCells = allHomeCells.filter((cell) => cell.type === "post");
+	const hqCells = allHomeCells.filter((cell) => cell.type === "hq");
+
+	let flagCells;
+	let mineCells;
+	let bombCells;
+	let normalCells;
+	if (info.orientation === "row") {
+		flagCells = hqCells.filter((cell) => cell.r === info.hqRow && info.hqCols.includes(cell.c));
+		mineCells = postCells.filter((cell) => info.mineRows.includes(cell.r));
+		bombCells = [...postCells, ...hqCells].filter((cell) => cell.r !== info.frontRow);
+		normalCells = [...postCells, ...hqCells];
+	} else {
+		flagCells = hqCells.filter((cell) => cell.c === info.hqCol && info.hqRows.includes(cell.r));
+		mineCells = postCells.filter((cell) => info.mineCols.includes(cell.c));
+		bombCells = [...postCells, ...hqCells].filter((cell) => cell.c !== info.frontCol);
+		normalCells = [...postCells, ...hqCells];
+	}
+
+	flagCells = sortCells(flagCells);
+	mineCells = sortCells(mineCells);
+	bombCells = sortCells(bombCells);
+	normalCells = sortCells(normalCells);
+
+	const pieces = Array.from(room.pieces.values()).filter((p) => p.ownerId === playerId);
+	const ordered = [
+		...pieces.filter((p) => p.type === "flag"),
+		...pieces.filter((p) => p.type === "mine"),
+		...pieces.filter((p) => p.type === "bomb"),
+		...pieces.filter((p) => p.type !== "flag" && p.type !== "mine" && p.type !== "bomb")
+	];
+
+	for (const piece of ordered) {
+		let candidates;
+		if (piece.type === "flag") candidates = flagCells;
+		else if (piece.type === "mine") candidates = mineCells;
+		else if (piece.type === "bomb") candidates = bombCells;
+		else candidates = normalCells;
+
+		const available = candidates.filter((pos) => !pieceAt(room, pos));
+		assert.ok(available.length > 0, `No placement cell for ${piece.type} (${seat})`);
+		const pos = pick(available);
+		const result = applyPlacement(room, playerId, piece.id, pos);
+		assert.equal(result.ok, true, `place ${piece.type} at ${pos.r},${pos.c}: ${result.reason}`);
+	}
+}
+
+/** Four seated players, full placement, lobby → play (2v2). */
+export function setup2v2ForPlaythrough(room) {
+	const players = {};
+	for (const seat of ["N", "E", "S", "W"]) {
+		const { playerId, player } = addPlayer(room, { seat });
+		players[seat] = playerId;
+		placePlayerPieces(room, playerId, seat);
+		player.ready = true;
+	}
+	assert.equal(maybeAdvancePhase(room), true);
+	assert.equal(room.gameMode, "2v2");
+	assert.equal(room.phase, PHASES.PLAY);
+	return players;
+}
+
+function pieceAt(room, pos) {
+	for (const p of room.pieces.values()) {
+		if (p.alive !== false && p.pos && p.pos.r === pos.r && p.pos.c === pos.c) return p;
+	}
+	return null;
+}
+
+/** Try biased legal moves first, then any legal move; returns applyMove result. */
+export function playBotMove(room, seat) {
+	const playerId = room.seatToPlayerId.get(seat);
+	const candidates = [
+		...findLegalPlayMoves(room, seat, { biasToEnemyHq: true }),
+		...findLegalPlayMoves(room, seat, { limit: 32 })
+	];
+	const seen = new Set();
+	let lastReason = null;
+	for (const { pieceId, to } of candidates) {
+		const key = `${pieceId}:${to.r},${to.c}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		const result = applyMove(room, playerId, pieceId, to);
+		if (result.ok) return result;
+		lastReason = result.reason;
+	}
+	throw new Error(`No legal move for seat ${seat}${lastReason ? `: ${lastReason}` : ""}`);
 }
