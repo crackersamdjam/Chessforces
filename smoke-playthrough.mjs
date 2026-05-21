@@ -8,7 +8,7 @@ import {
 	assert,
 	applyMove,
 	expectText,
-	findPlayMoves,
+	findLegalPlayMovesOnPage,
 	setup2v2Lobby,
 	start2v2Play,
 	waitForTurnToEnd
@@ -18,134 +18,9 @@ const MAX_MOVES = 5000;
 const GAME_TIMEOUT_MS = 120_000; // two minutes
 // Last OK run: 350 moves, ~72s (1m 12s). Not deterministic — lobby randomize uses Math.random().
 
-const ENEMY_HQ = {
-	N: [
-		{ r: 7, c: 0 },
-		{ r: 9, c: 0 },
-		{ r: 7, c: 16 },
-		{ r: 9, c: 16 }
-	],
-	S: [
-		{ r: 7, c: 0 },
-		{ r: 9, c: 0 },
-		{ r: 7, c: 16 },
-		{ r: 9, c: 16 }
-	],
-	E: [
-		{ r: 0, c: 7 },
-		{ r: 0, c: 9 },
-		{ r: 16, c: 7 },
-		{ r: 16, c: 9 }
-	],
-	W: [
-		{ r: 0, c: 7 },
-		{ r: 0, c: 9 },
-		{ r: 16, c: 7 },
-		{ r: 16, c: 9 }
-	]
-};
-
-/** Road-step and capture moves, biased toward enemy HQ in 2v2. */
-async function findAggressivePlayMoves(page, seat, limit = 64) {
-	return page.evaluate(
-		({ seat, limit, enemyHq }) => {
-			const SEATS = ["N", "E", "S", "W"];
-			const teamOf = (s) => ({ N: "NS", S: "NS", E: "EW", W: "EW" }[s] ?? s);
-			const modeLine = document.querySelector("#modeLine")?.textContent ?? "";
-			const gameMode = modeLine.includes("2v2") ? "2v2" : "ffa";
-
-			const isEnemySeat = (other) => {
-				if (!other || other === seat) return false;
-				if (gameMode === "2v2") return teamOf(seat) !== teamOf(other);
-				return other !== seat;
-			};
-
-			const tokenSeat = (token) => SEATS.find((s) => token.classList.contains(`token--seat-${s}`)) ?? null;
-
-			const blocked = (label) => label.startsWith("军旗") || label.startsWith("地雷");
-			const dirs = [
-				[0, 1],
-				[0, -1],
-				[1, 0],
-				[-1, 0]
-			];
-			const targets = enemyHq[seat] ?? [];
-			const distToEnemy = (r, c) => {
-				if (!targets.length) return 0;
-				return Math.min(...targets.map((t) => Math.abs(t.r - r) + Math.abs(t.c - c)));
-			};
-
-			const moves = [];
-			for (const cell of document.querySelectorAll(".cell[data-r][data-c]")) {
-				const token = cell.querySelector(".token");
-				if (!token) continue;
-				if (!token.classList.contains(`token--seat-${seat}`)) continue;
-				const label = token.querySelector(".label")?.textContent ?? "";
-				if (blocked(label)) continue;
-				const r = Number(cell.dataset.r);
-				const c = Number(cell.dataset.c);
-				const fromCell = cell;
-
-				const tryDest = (nr, nc, capture) => {
-					const dest = document.querySelector(`.cell[data-r="${nr}"][data-c="${nc}"]`);
-					if (!dest || dest.classList.contains("cell--inactive")) return;
-					if (dest.classList.contains("cell--mountain") && !label.includes("工兵")) return;
-
-					const destToken = dest.querySelector(".token");
-					if (destToken) {
-						if (!capture) return;
-						const otherSeat = tokenSeat(destToken);
-						if (!isEnemySeat(otherSeat)) return;
-						if (dest.classList.contains("cell--camp")) return;
-					} else if (capture) {
-						return;
-					}
-
-					const score = (capture ? 1000 : 0) - distToEnemy(nr, nc);
-					moves.push({ fromR: r, fromC: c, toR: nr, toC: nc, score, capture });
-				};
-
-				for (const [dr, dc] of dirs) {
-					const nr = r + dr;
-					const nc = c + dc;
-					const dest = document.querySelector(`.cell[data-r="${nr}"][data-c="${nc}"]`);
-					const destToken = dest?.querySelector(".token");
-					tryDest(nr, nc, Boolean(destToken));
-				}
-
-				// Diagonal step through camp (road rules during play).
-				for (const [dr, dc] of [
-					[1, 1],
-					[1, -1],
-					[-1, 1],
-					[-1, -1]
-				]) {
-					const nr = r + dr;
-					const nc = c + dc;
-					const dest = document.querySelector(`.cell[data-r="${nr}"][data-c="${nc}"]`);
-					if (!dest) continue;
-					const fromCamp = fromCell.classList.contains("cell--camp");
-					const toCamp = dest.classList.contains("cell--camp");
-					if (!fromCamp && !toCamp) continue;
-					const destToken = dest.querySelector(".token");
-					tryDest(nr, nc, Boolean(destToken));
-				}
-			}
-
-			moves.sort((a, b) => b.score - a.score);
-			return moves.slice(0, limit).map(({ fromR, fromC, toR, toC }) => ({ fromR, fromC, toR, toC }));
-		},
-		{ seat, limit, enemyHq: ENEMY_HQ }
-	);
-}
-
 async function playAggressiveMove(page, seat) {
-	const moves = await findAggressivePlayMoves(page, seat);
-	if (moves.length === 0) {
-		const fallback = await findPlayMoves(page, seat);
-		assert(fallback.length > 0, `No play moves found for seat ${seat}`);
-		moves.push(...fallback);
-	}
+	const moves = await findLegalPlayMovesOnPage(page, seat, { limit: 64, biasToEnemyHq: true });
+	assert(moves.length > 0, `No play moves found for seat ${seat}`);
 	let lastErr = null;
 	for (const move of moves) {
 		try {

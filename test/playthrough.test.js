@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyMove, PHASES } from "../lib/game/index.js";
+import { applyMove, enemyHqTargetsForSeat, eliminatePlayer, PHASES } from "../lib/game/index.js";
 import { createTestRoom, playBotMove, setup2v2ForPlaythrough } from "./helpers.js";
 
 const MAX_MOVES = 500;
@@ -8,6 +8,17 @@ const MAX_MOVES = 500;
 const logPlaythrough = process.env.LOG_PLAYTHROUGH === "1";
 
 describe("2v2 playthrough", () => {
+	it("biases toward the first uncaptured enemy HQ only", () => {
+		const room = createTestRoom();
+		setup2v2ForPlaythrough(room);
+
+		assert.deepEqual(enemyHqTargetsForSeat(room, "N")[0], { r: 7, c: 0 });
+		eliminatePlayer(room, "W");
+		assert.deepEqual(enemyHqTargetsForSeat(room, "N")[0], { r: 7, c: 16 });
+		eliminatePlayer(room, "E");
+		assert.deepEqual(enemyHqTargetsForSeat(room, "N"), []);
+	});
+
 	it("plays a full game to completion via lib/game only", () => {
 		const room = createTestRoom();
 		setup2v2ForPlaythrough(room);

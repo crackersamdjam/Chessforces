@@ -1,4 +1,9 @@
+import { createBoard } from "./lib/game/board.js";
+import { findLegalPlayMoves } from "./lib/game/play-moves.js";
+
 export const BASE_URL = process.env.SMOKE_BASE_URL ?? "http://localhost:5173";
+
+const PLAY_BOARD = createBoard();
 
 export function assert(cond, msg) {
 	if (!cond) throw new Error(msg);
@@ -155,41 +160,96 @@ export async function findPlacementMoves(page, seat, limit = 12) {
 	);
 }
 
-/** Find empty-cell road-step moves for the current player during play. */
+/** Scrape piece positions and meta from the live board DOM. */
+export async function scrapePlayState(page) {
+	return page.evaluate(() => {
+		const SEATS = ["N", "E", "S", "W"];
+		const typeFromLabel = (label) => {
+			if (label.startsWith("军旗")) return "flag";
+			if (label.startsWith("地雷")) return "mine";
+			if (label.startsWith("炸弹")) return "bomb";
+			if (label.startsWith("工兵")) return "engineer";
+			return "captain";
+		};
+		const pieces = [];
+		for (const cell of document.querySelectorAll(".cell[data-r][data-c]")) {
+			const token = cell.querySelector(".token");
+			if (!token) continue;
+			const ownerSeat = SEATS.find((s) => token.classList.contains(`token--seat-${s}`));
+			if (!ownerSeat) continue;
+			const label = token.querySelector(".label")?.textContent ?? "";
+			const r = Number(cell.dataset.r);
+			const c = Number(cell.dataset.c);
+			pieces.push({
+				id: `${ownerSeat}@${r},${c}`,
+				seat: ownerSeat,
+				type: typeFromLabel(label),
+				r,
+				c
+			});
+		}
+		const eliminatedSeats = SEATS.filter((s) =>
+			document.querySelector(`.seatCard--${s} .pill`)?.classList.contains("eliminated")
+		);
+		const modeLine = document.querySelector("#modeLine")?.textContent ?? "";
+		const gameMode = modeLine.includes("2v2") ? "2v2" : "ffa";
+		return { pieces, eliminatedSeats, gameMode };
+	});
+}
+
+/** Build a minimal room object for lib/game move generation. */
+export function buildPlayRoom(scrape) {
+	const room = {
+		gameMode: scrape.gameMode,
+		eliminatedSeats: new Set(scrape.eliminatedSeats),
+		seatToPlayerId: new Map(),
+		players: new Map(),
+		pieces: new Map(),
+		board: PLAY_BOARD
+	};
+	for (const seat of ["N", "E", "S", "W"]) {
+		const playerId = `player-${seat}`;
+		room.seatToPlayerId.set(seat, playerId);
+		room.players.set(playerId, { id: playerId, seat });
+	}
+	for (const p of scrape.pieces) {
+		const ownerId = `player-${p.seat}`;
+		room.pieces.set(p.id, {
+			id: p.id,
+			ownerId,
+			type: p.type,
+			pos: { r: p.r, c: p.c },
+			alive: true
+		});
+	}
+	return room;
+}
+
+/**
+ * All legal play moves for a seat (road steps, camp diagonals, railway slides).
+ * Uses lib/game rules on a DOM scrape of the current board.
+ */
+export async function findLegalPlayMovesOnPage(page, seat, { limit = 64, biasToEnemyHq = false } = {}) {
+	const scrape = await scrapePlayState(page);
+	const room = buildPlayRoom(scrape);
+	const legal = findLegalPlayMoves(room, seat, { limit, biasToEnemyHq });
+	const moves = [];
+	for (const { pieceId, to } of legal) {
+		const piece = room.pieces.get(pieceId);
+		if (!piece?.pos) continue;
+		moves.push({
+			fromR: piece.pos.r,
+			fromC: piece.pos.c,
+			toR: to.r,
+			toC: to.c
+		});
+	}
+	return moves;
+}
+
+/** Find legal play moves for the current player during play. */
 export async function findPlayMoves(page, seat, limit = 24) {
-	return page.evaluate(
-		({ seat, limit }) => {
-			const blocked = (label) => label.startsWith("军旗") || label.startsWith("地雷");
-			const moves = [];
-			const dirs = [
-				[0, 1],
-				[0, -1],
-				[1, 0],
-				[-1, 0]
-			];
-			for (const cell of document.querySelectorAll(".cell[data-r][data-c]")) {
-				const token = cell.querySelector(".token");
-				if (!token) continue;
-				if (!token.classList.contains(`token--seat-${seat}`)) continue;
-				const label = token.querySelector(".label")?.textContent ?? "";
-				if (blocked(label)) continue;
-				const r = Number(cell.dataset.r);
-				const c = Number(cell.dataset.c);
-				for (const [dr, dc] of dirs) {
-					const nr = r + dr;
-					const nc = c + dc;
-					const dest = document.querySelector(`.cell[data-r="${nr}"][data-c="${nc}"]`);
-					if (!dest || dest.querySelector(".token")) continue;
-					if (dest.classList.contains("cell--inactive")) continue;
-					if (dest.classList.contains("cell--mountain") && !label.includes("工兵")) continue;
-					moves.push({ fromR: r, fromC: c, toR: nr, toC: nc });
-					if (moves.length >= limit) return moves;
-				}
-			}
-			return moves;
-		},
-		{ seat, limit }
-	);
+	return findLegalPlayMovesOnPage(page, seat, { limit });
 }
 
 export async function applyMove(page, move) {
