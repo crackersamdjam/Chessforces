@@ -1,3 +1,5 @@
+import { initPlaybackPage } from "./playback.js";
+
 const $ = (id) => document.getElementById(id);
 
 function genRoomId() {
@@ -13,6 +15,10 @@ function genRoomId() {
 function roomIdFromPath() {
 	const match = location.pathname.match(/^\/room\/([^/]+)/);
 	return match ? decodeURIComponent(match[1]) : null;
+}
+
+function isPlaybackPath() {
+	return location.pathname === "/playback";
 }
 
 function wsUrlFor(roomId) {
@@ -68,7 +74,9 @@ function formatTime(ms) {
 }
 
 function setHint(text) {
-	$("hint").textContent = text || "";
+	const hint = $("hint");
+	if (!hint) return;
+	hint.textContent = text || "";
 }
 
 function ensureSeatViews() {
@@ -345,6 +353,13 @@ function render() {
 		myPieces.length > 0 && myPieces.every((p) => p.pos !== null);
 	$("readyBtn").disabled = !me || !me.seat || me.ready || !allMyPiecesPlaced;
 	$("unreadyBtn").disabled = !me || !me.seat || !me.ready;
+	const canUseSetupControls = state.phase === "lobby";
+	const downloadSetupBtn = $("downloadSetupBtn");
+	const uploadSetupBtn = $("uploadSetupBtn");
+	if (downloadSetupBtn) downloadSetupBtn.disabled = !canUseSetupControls;
+	if (uploadSetupBtn) uploadSetupBtn.disabled = !canUseSetupControls;
+	const downloadGameBtn = $("downloadGameBtn");
+	if (downloadGameBtn) downloadGameBtn.disabled = state.phase !== "done";
 	// Hide lobby controls (ready, randomize) once the game is under way.
 	const inPlay = state.phase === "play" || state.phase === "done";
 	const lobbyEl = $("lobbyControls");
@@ -726,6 +741,7 @@ function scheduleAutoRandomize() {
 function initLanding() {
 	$("landing").classList.remove("hidden");
 	$("gameView").classList.add("hidden");
+	$("playbackView").classList.add("hidden");
 
 	$("createRoomBtn").addEventListener("click", () => {
 		location.href = `/room/${genRoomId()}`;
@@ -741,11 +757,15 @@ function initLanding() {
 	$("joinRoomInput").addEventListener("keydown", (e) => {
 		if (e.key === "Enter") joinRoom();
 	});
+	$("playbackModeBtn").addEventListener("click", () => {
+		location.href = "/playback";
+	});
 }
 
 function initRoom(roomId) {
 	$("landing").classList.add("hidden");
 	$("gameView").classList.remove("hidden");
+	$("playbackView").classList.add("hidden");
 	$("roomId").textContent = roomId;
 
 	socket = new WebSocket(wsUrlFor(roomId));
@@ -809,6 +829,37 @@ function initRoom(roomId) {
 			addChatLine(msg);
 			return;
 		}
+		if (msg.type === "setup_file") {
+			if (!msg.ok) {
+				setHint(`⚠ ${msg.reason}`);
+				setTimeout(() => setHint(""), 2500);
+				return;
+			}
+			downloadJsonFile(msg.setup, `setup-${roomId}.chessforces-setup.json`);
+			setHint("Setup file downloaded.");
+			setTimeout(() => setHint(""), 1500);
+			return;
+		}
+		if (msg.type === "game_file") {
+			if (!msg.ok) {
+				setHint(`⚠ ${msg.reason}`);
+				setTimeout(() => setHint(""), 2500);
+				return;
+			}
+			downloadJsonFile(msg.game, `game-${roomId}.chessforces-game.json`);
+			setHint("Game file downloaded.");
+			setTimeout(() => setHint(""), 1500);
+			return;
+		}
+		if (msg.type === "import_setup_result") {
+			if (!msg.ok) {
+				setHint(`⚠ ${msg.reason}`);
+			} else {
+				setHint("Setup imported.");
+			}
+			setTimeout(() => setHint(""), 2500);
+			return;
+		}
 		if (msg.type === "phase") {
 			// Legacy handler kept for forward-compatibility; server now sends state instead.
 			if (msg.phase === "play") setHint("Game started. Select one of your pieces and move.");
@@ -856,14 +907,62 @@ function initRoom(roomId) {
 		randomizePlacement();
 	});
 
+	$("downloadSetupBtn").addEventListener("click", () => {
+		send({ type: "export_setup" });
+	});
+	$("uploadSetupBtn").addEventListener("click", () => {
+		$("uploadSetupInput").click();
+	});
+	$("uploadSetupInput").addEventListener("change", async () => {
+		const file = $("uploadSetupInput").files?.[0];
+		if (!file) return;
+		try {
+			const text = await file.text();
+			const setup = JSON.parse(text);
+			send({ type: "import_setup", setup });
+		} catch {
+			setHint("⚠ Invalid setup file.");
+			setTimeout(() => setHint(""), 2000);
+		} finally {
+			$("uploadSetupInput").value = "";
+		}
+	});
+	$("downloadGameBtn").addEventListener("click", () => {
+		send({ type: "export_game" });
+	});
+
 	$("debugBtn").addEventListener("click", () => {
 		document.body.classList.toggle("debug");
 		$("debugBtn").textContent = document.body.classList.contains("debug") ? "Debug: ON" : "Debug: OFF";
 	});
 }
 
+function downloadJsonFile(data, filename) {
+	const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+	const href = URL.createObjectURL(blob);
+	const link = document.createElement("a");
+	link.href = href;
+	link.download = filename;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	URL.revokeObjectURL(href);
+}
+
+function initPlayback() {
+	$("landing").classList.add("hidden");
+	$("gameView").classList.add("hidden");
+	$("playbackView").classList.remove("hidden");
+	$("playbackBackBtn").addEventListener("click", () => {
+		location.href = "/";
+	});
+	initPlaybackPage();
+}
+
 const activeRoomId = roomIdFromPath();
-if (activeRoomId) {
+if (isPlaybackPath()) {
+	initPlayback();
+} else if (activeRoomId) {
 	initRoom(activeRoomId);
 } else {
 	initLanding();

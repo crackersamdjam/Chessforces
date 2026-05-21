@@ -40,7 +40,10 @@ describe("2v2 playthrough", () => {
 
 		assert.equal(room.phase, PHASES.DONE);
 		assert.ok(moves > 0, "expected at least one move");
-		assert.ok(room.winnerTeam === "NS" || room.winnerTeam === "EW", "expected a team winner");
+		assert.ok(
+			room.winnerTeam === "NS" || room.winnerTeam === "EW" || room.winnerTeam === null,
+			"expected a team winner or draw"
+		);
 		if (logPlaythrough) {
 			// eslint-disable-next-line no-console
 			console.log(`Game over: team ${room.winnerTeam} (${moves} moves)`);

@@ -75,6 +75,11 @@ body {
 	margin-top: 22px;
 }
 
+.landingSecondary {
+	width: 100%;
+	margin-top: 10px;
+}
+
 .landingDivider {
 	margin: 22px 0 12px;
 	text-align: center;
@@ -296,6 +301,14 @@ body {
 	border-radius: 14px;
 	padding: 14px;
 	backdrop-filter: blur(10px);
+}
+
+.boardTools {
+	margin-top: 8px;
+}
+
+.playbackLayout {
+	grid-template-columns: 320px 1fr;
 }
 .boardHeader {
 	display: flex;

@@ -26,6 +26,7 @@
 						/>
 						<button id="joinRoomBtn" type="button" class="btn">Join</button>
 					</div>
+					<button id="playbackModeBtn" type="button" class="btn landingSecondary">Playback mode</button>
 					<p class="landingRules">
 						<a
 							class="landingLink"
@@ -83,6 +84,11 @@
 						<div class="row gap">
 							<button id="randomizeBtn" class="btn" style="flex:1">Random setup</button>
 						</div>
+						<div class="row gap" style="margin-top:8px">
+							<button id="downloadSetupBtn" class="btn" style="flex:1">Download setup</button>
+							<button id="uploadSetupBtn" class="btn" style="flex:1">Upload setup</button>
+							<input id="uploadSetupInput" type="file" accept=".json,.chessforces-setup.json,application/json" class="hidden" />
+						</div>
 					</div>
 
 					<div style="margin-top:8px">
@@ -106,11 +112,64 @@
 					</div>
 					<div id="board" class="board"></div>
 					<div id="hint" class="hint muted"></div>
+					<div class="row gap boardTools">
+						<button id="downloadGameBtn" class="btn">Download game</button>
+					</div>
 					<div class="legend muted">
 						Click your piece on the board to select it, then click a destination. Railway pieces can slide multiple steps.
 					</div>
 				</section>
 			</main>
+			</div>
+
+			<div id="playbackView" class="hidden">
+				<header class="topbar">
+					<div class="brand">
+						<div class="title">Chessforces</div>
+						<div class="subtitle">Replay uploaded games</div>
+					</div>
+					<div class="room">
+						<button id="playbackBackBtn" class="btn">Back</button>
+					</div>
+				</header>
+
+				<main class="layout playbackLayout">
+					<section class="panel">
+						<div class="panelTitle">Playback</div>
+						<div class="panelSubtitle muted">Upload a saved game and step through every move.</div>
+						<div class="row gap" style="margin-top:10px">
+							<input id="playbackFileInput" type="file" class="input" accept=".json,.chessforces-game.json,application/json" />
+						</div>
+						<div class="divider"></div>
+						<div class="label muted">Piece visibility</div>
+						<div class="row gap">
+							<select id="replaySeatFilter" class="input">
+								<option value="all">Show all pieces</option>
+								<option value="N">Show North only</option>
+								<option value="E">Show East only</option>
+								<option value="S">Show South only</option>
+								<option value="W">Show West only</option>
+							</select>
+						</div>
+						<div class="divider"></div>
+						<div class="row gap">
+							<button id="replayFirstBtn" class="btn">|&lt;</button>
+							<button id="replayPrevBtn" class="btn">&lt;</button>
+							<button id="replayNextBtn" class="btn">&gt;</button>
+							<button id="replayLastBtn" class="btn">&gt;|</button>
+						</div>
+						<div id="replayMoveLabel" class="hint muted"></div>
+					</section>
+
+					<section class="boardWrap">
+						<div class="boardHeader">
+							<div class="panelTitle">Replay Board</div>
+							<div id="replayStatusLine" class="muted">No game loaded.</div>
+						</div>
+						<div id="replayBoard" class="board"></div>
+						<div id="replayHint" class="hint muted"></div>
+					</section>
+				</main>
 			</div>
 		</div>
 
