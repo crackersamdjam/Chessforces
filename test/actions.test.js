@@ -79,6 +79,17 @@ describe("actions", () => {
 		assert.match(result.reason, /not your turn/i);
 	});
 
+	it("rejects moving out of HQ", () => {
+		const room = createTestRoom();
+		const players = setupMinimalGame(room, ["N", "E"]);
+		const captain = setPieceAt(room, players.N, "captain", { r: 0, c: 7 });
+		room.turnSeat = "N";
+		const result = applyMove(room, players.N, captain.id, { r: 1, c: 7 });
+		assert.equal(result.ok, false);
+		assert.match(result.reason, /HQ|大本营/i);
+		assertPos(captain, 0, 7);
+	});
+
 	it("captain beats lieutenant on adjacent capture", () => {
 		const room = createTestRoom();
 		const players = setupMinimalGame(room, ["N", "E"]);
