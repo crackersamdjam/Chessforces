@@ -333,9 +333,9 @@ export async function createTrackedPage(browser, label, errors) {
 export async function setup2v2Lobby(browser, errors) {
 	const p1 = await createTrackedPage(browser, "P1", errors);
 	await p1.page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
-	await p1.page.waitForLoadState("networkidle");
+	await p1.page.locator("#createRoomBtn").click();
+	await p1.page.waitForURL(/\/room\/[A-Za-z0-9_-]+$/);
 	const roomUrl = p1.page.url();
-	assert(/\/room\/[A-Za-z0-9_-]+$/.test(roomUrl), `Expected redirect to /room/<id>, got: ${roomUrl}`);
 
 	const players = [p1];
 	for (let i = 2; i <= 4; i++) {

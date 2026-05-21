@@ -10,21 +10,18 @@ function genRoomId() {
 	return s;
 }
 
-let roomId = (() => {
+function roomIdFromPath() {
 	const match = location.pathname.match(/^\/room\/([^/]+)/);
-	if (match) return match[1];
-	const id = genRoomId();
-	// Update URL without a network reload; server also serves this path.
-	history.replaceState(null, "", `/room/${id}`);
-	return id;
-})();
+	return match ? decodeURIComponent(match[1]) : null;
+}
 
-$("roomId").textContent = roomId;
-
-const wsUrl = (() => {
+function wsUrlFor(roomId) {
 	const proto = location.protocol === "https:" ? "wss:" : "ws:";
 	return `${proto}//${location.host}/ws/room/${roomId}`;
-})();
+}
+
+/** @type {WebSocket|null} */
+let socket = null;
 
 /** @type {{playerId:string|null, seats:string[], state:any|null}} */
 const app = {
@@ -42,7 +39,7 @@ const seatViews = new Map();
 const boardViews = new Map();
 
 function send(obj) {
-	if (socket.readyState !== WebSocket.OPEN) return;
+	if (!socket || socket.readyState !== WebSocket.OPEN) return;
 	socket.send(JSON.stringify(obj));
 }
 
@@ -726,114 +723,149 @@ function scheduleAutoRandomize() {
 	}, 250);
 }
 
-const socket = new WebSocket(wsUrl);
+function initLanding() {
+	$("landing").classList.remove("hidden");
+	$("gameView").classList.add("hidden");
 
-socket.addEventListener("open", () => {
-	setHint("Pick a seat — pieces will be placed automatically. Click Ready when done. (Game will start automatically when all present players are ready)");
-	render();
-});
+	$("createRoomBtn").addEventListener("click", () => {
+		location.href = `/room/${genRoomId()}`;
+	});
 
-socket.addEventListener("close", () => {
-	render();
-});
-
-socket.addEventListener("message", (ev) => {
-	let msg;
-	try {
-		msg = JSON.parse(String(ev.data));
-	} catch {
-		return;
+	function joinRoom() {
+		const id = $("joinRoomInput").value.trim();
+		if (!id) return;
+		location.href = `/room/${encodeURIComponent(id)}`;
 	}
-	if (!msg || typeof msg.type !== "string") return;
 
-	if (msg.type === "hello") {
-		app.playerId = msg.playerId;
-		app.seats = msg.seats || ["N", "E", "S", "W"];
-		render();
-		return;
-	}
-	if (msg.type === "state") {
-		const prevPhase = app.state?.phase;
-		app.state = msg.state;
-		// If selected piece got removed (bomb), clear selection.
-		if (selectedPieceId && !app.state.pieces.some((p) => p.id === selectedPieceId)) {
-			selectedPieceId = null;
-		}
-		// Auto-randomize as soon as the player takes a seat in the lobby.
-		if (msg.state.phase === "lobby") {
-			const me = msg.state.players.find((p) => p.id === app.playerId);
-			if (me?.seat && me.seat !== autoPlacedSeat) {
-				autoPlacedSeat = me.seat;
-				scheduleAutoRandomize();
-			}
-		}
-		// Show hint on phase transitions.
-		if (prevPhase !== msg.state.phase) {
-			if (msg.state.phase === "play") setHint("Game started. On your turn, select one of your pieces and move.");
-		}
-		render();
-		return;
-	}
-	if (msg.type === "move_result") {
-		if (!msg.ok) {
-			setHint(`⚠ ${msg.reason}`);
-			setTimeout(() => setHint(""), 2500);
-		}
-		return;
-	}
-	if (msg.type === "chat") {
-		addChatLine(msg);
-		return;
-	}
-	if (msg.type === "phase") {
-		// Legacy handler kept for forward-compatibility; server now sends state instead.
-		if (msg.phase === "play") setHint("Game started. Select one of your pieces and move.");
-		render();
-		return;
-	}
-});
-
-$("copyLinkBtn").addEventListener("click", async () => {
-	try {
-		await navigator.clipboard.writeText(location.href);
-		setHint("Link copied.");
-		setTimeout(() => setHint(""), 1200);
-	} catch {
-		setHint("Copy failed. Copy from address bar.");
-	}
-});
-
-$("saveNameBtn").addEventListener("click", () => {
-	const name = $("nameInput").value.trim();
-	if (!name) return;
-	send({ type: "set_name", name });
-	setHint("Name saved.");
-	setTimeout(() => setHint(""), 1200);
-});
-
-$("readyBtn").addEventListener("click", () => send({ type: "set_ready", ready: true }));
-$("unreadyBtn").addEventListener("click", () => send({ type: "set_ready", ready: false }));
-
-function sendChat() {
-	const text = $("chatInput").value.trim();
-	if (!text) return;
-	$("chatInput").value = "";
-	send({ type: "chat", text });
+	$("joinRoomBtn").addEventListener("click", joinRoom);
+	$("joinRoomInput").addEventListener("keydown", (e) => {
+		if (e.key === "Enter") joinRoom();
+	});
 }
 
-$("sendChatBtn").addEventListener("click", sendChat);
-$("chatInput").addEventListener("keydown", (e) => {
-	if (e.key === "Enter") sendChat();
-});
+function initRoom(roomId) {
+	$("landing").classList.add("hidden");
+	$("gameView").classList.remove("hidden");
+	$("roomId").textContent = roomId;
 
-$("randomizeBtn").addEventListener("click", () => {
-	clearTimeout(autoRandomizeTimer);
-	autoRandomizeTimer = null;
-	randomizePlacement();
-});
+	socket = new WebSocket(wsUrlFor(roomId));
 
-$("debugBtn").addEventListener("click", () => {
-	document.body.classList.toggle("debug");
-	$("debugBtn").textContent = document.body.classList.contains("debug") ? "Debug: ON" : "Debug: OFF";
-});
+	socket.addEventListener("open", () => {
+		setHint(
+			"Pick a seat — pieces will be placed automatically. Click Ready when done. (Game will start automatically when all present players are ready)"
+		);
+		render();
+	});
+
+	socket.addEventListener("close", () => {
+		render();
+	});
+
+	socket.addEventListener("message", (ev) => {
+		let msg;
+		try {
+			msg = JSON.parse(String(ev.data));
+		} catch {
+			return;
+		}
+		if (!msg || typeof msg.type !== "string") return;
+
+		if (msg.type === "hello") {
+			app.playerId = msg.playerId;
+			app.seats = msg.seats || ["N", "E", "S", "W"];
+			render();
+			return;
+		}
+		if (msg.type === "state") {
+			const prevPhase = app.state?.phase;
+			app.state = msg.state;
+			// If selected piece got removed (bomb), clear selection.
+			if (selectedPieceId && !app.state.pieces.some((p) => p.id === selectedPieceId)) {
+				selectedPieceId = null;
+			}
+			// Auto-randomize as soon as the player takes a seat in the lobby.
+			if (msg.state.phase === "lobby") {
+				const me = msg.state.players.find((p) => p.id === app.playerId);
+				if (me?.seat && me.seat !== autoPlacedSeat) {
+					autoPlacedSeat = me.seat;
+					scheduleAutoRandomize();
+				}
+			}
+			// Show hint on phase transitions.
+			if (prevPhase !== msg.state.phase) {
+				if (msg.state.phase === "play") setHint("Game started. On your turn, select one of your pieces and move.");
+			}
+			render();
+			return;
+		}
+		if (msg.type === "move_result") {
+			if (!msg.ok) {
+				setHint(`⚠ ${msg.reason}`);
+				setTimeout(() => setHint(""), 2500);
+			}
+			return;
+		}
+		if (msg.type === "chat") {
+			addChatLine(msg);
+			return;
+		}
+		if (msg.type === "phase") {
+			// Legacy handler kept for forward-compatibility; server now sends state instead.
+			if (msg.phase === "play") setHint("Game started. Select one of your pieces and move.");
+			render();
+			return;
+		}
+	});
+
+	$("copyLinkBtn").addEventListener("click", async () => {
+		try {
+			await navigator.clipboard.writeText(location.href);
+			setHint("Link copied.");
+			setTimeout(() => setHint(""), 1200);
+		} catch {
+			setHint("Copy failed. Copy from address bar.");
+		}
+	});
+
+	$("saveNameBtn").addEventListener("click", () => {
+		const name = $("nameInput").value.trim();
+		if (!name) return;
+		send({ type: "set_name", name });
+		setHint("Name saved.");
+		setTimeout(() => setHint(""), 1200);
+	});
+
+	$("readyBtn").addEventListener("click", () => send({ type: "set_ready", ready: true }));
+	$("unreadyBtn").addEventListener("click", () => send({ type: "set_ready", ready: false }));
+
+	function sendChat() {
+		const text = $("chatInput").value.trim();
+		if (!text) return;
+		$("chatInput").value = "";
+		send({ type: "chat", text });
+	}
+
+	$("sendChatBtn").addEventListener("click", sendChat);
+	$("chatInput").addEventListener("keydown", (e) => {
+		if (e.key === "Enter") sendChat();
+	});
+
+	$("randomizeBtn").addEventListener("click", () => {
+		clearTimeout(autoRandomizeTimer);
+		autoRandomizeTimer = null;
+		randomizePlacement();
+	});
+
+	$("debugBtn").addEventListener("click", () => {
+		document.body.classList.toggle("debug");
+		$("debugBtn").textContent = document.body.classList.contains("debug") ? "Debug: ON" : "Debug: OFF";
+	});
+}
+
+const activeRoomId = roomIdFromPath();
+if (activeRoomId) {
+	initRoom(activeRoomId);
+} else {
+	initLanding();
+}
 

@@ -8,6 +8,36 @@
 	</head>
 	<body>
 		<div id="app">
+			<section id="landing" class="landing">
+				<div class="landingCard">
+					<div class="landingBrand">
+						<div class="title">Chessforces</div>
+						<div class="subtitle">4-player 军棋 — share a link, play in the browser</div>
+					</div>
+					<button id="createRoomBtn" type="button" class="btn primary landingPrimary">Create new room</button>
+					<div class="landingDivider muted">or join an existing room</div>
+					<div class="row gap">
+						<input
+							id="joinRoomInput"
+							class="input"
+							placeholder="Room ID"
+							autocomplete="off"
+							spellcheck="false"
+						/>
+						<button id="joinRoomBtn" type="button" class="btn">Join</button>
+					</div>
+					<p class="landingRules">
+						<a
+							class="landingLink"
+							href="https://github.com/crackersamdjam/Chessforces/blob/master/README.md"
+							target="_blank"
+							rel="noopener noreferrer"
+						>Rules &amp; how to play</a>
+					</p>
+				</div>
+			</section>
+
+			<div id="gameView" class="hidden">
 			<header class="topbar">
 				<div class="brand">
 					<div class="title">Chessforces</div>
@@ -81,6 +111,7 @@
 					</div>
 				</section>
 			</main>
+			</div>
 		</div>
 
 		<script type="module" src="/client.js"></script>

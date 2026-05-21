@@ -21,8 +21,8 @@ npm run dev
 
 Then open:
 
-- `http://localhost:5173/` (auto-creates a new room link)
-- or `http://localhost:5173/room/<id>`
+- `http://localhost:5173/` (landing page — create or join a room)
+- `http://localhost:5173/room/<id>` (share this link with friends)
 
 Share the room URL with friends. Up to 4 players can join.
 
