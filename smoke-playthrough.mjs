@@ -179,6 +179,8 @@ async function run() {
 	const errors = [];
 
 	const { roomUrl, players, seats } = await setup2v2Lobby(browser, errors);
+	// eslint-disable-next-line no-console
+	console.info(`smoke-playthrough: open in browser while running → ${roomUrl}`);
 	await start2v2Play(players);
 
 	let moves = 0;
