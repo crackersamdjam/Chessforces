@@ -16,7 +16,7 @@ import {
 
 const MAX_MOVES = 5000;
 const GAME_TIMEOUT_MS = 120_000; // two minutes
-// this test ran in 1m10 = 70s
+// Last OK run: 350 moves, ~72s (1m 12s). Not deterministic — lobby randomize uses Math.random().
 
 const ENEMY_HQ = {
 	N: [

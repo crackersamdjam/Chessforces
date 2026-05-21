@@ -5,6 +5,8 @@ import { createTestRoom, playBotMove, setup2v2ForPlaythrough } from "./helpers.j
 
 const MAX_MOVES = 500;
 
+const logPlaythrough = process.env.LOG_PLAYTHROUGH === "1";
+
 describe("2v2 playthrough", () => {
 	it("plays a full game to completion via lib/game only", () => {
 		const room = createTestRoom();
@@ -19,14 +21,18 @@ describe("2v2 playthrough", () => {
 			assert.equal(result.ok, true);
 			moves++;
 			const { from, to, by } = result.lastMove;
-			// eslint-disable-next-line no-console
-			console.log(`#${moves} ${by}: (${from.r},${from.c}) → (${to.r},${to.c})`);
+			if (logPlaythrough) {
+				// eslint-disable-next-line no-console
+				console.log(`#${moves} ${by}: (${from.r},${from.c}) → (${to.r},${to.c})`);
+			}
 		}
 
 		assert.equal(room.phase, PHASES.DONE);
 		assert.ok(moves > 0, "expected at least one move");
 		assert.ok(room.winnerTeam === "NS" || room.winnerTeam === "EW", "expected a team winner");
-		// eslint-disable-next-line no-console
-		console.log(`Game over: team ${room.winnerTeam} (${moves} moves)`);
+		if (logPlaythrough) {
+			// eslint-disable-next-line no-console
+			console.log(`Game over: team ${room.winnerTeam} (${moves} moves)`);
+		}
 	});
 });
