@@ -41,8 +41,15 @@ app.use(express.static(publicDir, {
 	}
 }));
 
-app.get(["/", "/room/:roomId", "/playback"], (_req, res) => {
+function sendIndex(res) {
+	res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+	res.setHeader("Pragma", "no-cache");
+	res.setHeader("Expires", "0");
 	res.sendFile(path.join(publicDir, "index.html"));
+}
+
+app.get(["/", "/room/:roomId", "/playback"], (_req, res) => {
+	sendIndex(res);
 });
 
 const server = http.createServer(app);
