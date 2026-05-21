@@ -7,7 +7,8 @@
 		"dev": "node server.js",
 		"start": "node server.js",
 		"test": "node --test test/board.test.js test/placement.test.js test/combat.test.js test/movement.test.js test/actions.test.js",
-		"test:e2e": "node smoke-playwright.mjs"
+		"test:e2e": "node smoke-playwright.mjs",
+		"test:e2e:playthrough": "node smoke-playthrough.mjs"
 	},
 	"dependencies": {
 		"express": "^4.19.2",
