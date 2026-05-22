@@ -17,22 +17,21 @@ import {
 } from "./helpers.js";
 
 describe("serialize", () => {
-	it("round-trips full-room setup export/import", () => {
+	it("round-trips personal setup across different seats", () => {
 		const room = createTestRoom();
-		for (const seat of ["N", "E", "S", "W"]) {
-			const { playerId } = addPlayer(room, { seat });
-			placePlayerPieces(room, playerId, seat);
-		}
-		const setupDoc = parseSetupDocument(exportSetup(room));
+		const { playerId: sourcePlayerId } = addPlayer(room, { seat: "N" });
+		placePlayerPieces(room, sourcePlayerId, "N");
+		const setupDoc = parseSetupDocument(exportSetup(room, sourcePlayerId));
 
 		const target = createTestRoom();
-		for (const seat of ["N", "E", "S", "W"]) {
-			addPlayer(target, { seat });
-		}
-		const imported = applySetupToRoom(target, setupDoc);
+		const { playerId: targetPlayerId } = addPlayer(target, { seat: "E" });
+		const imported = applySetupToRoom(target, targetPlayerId, setupDoc);
 		assert.equal(imported.ok, true);
 
-		assert.deepEqual(snapshotPieces(target), snapshotPieces(room));
+		assert.deepEqual(
+			snapshotLocalPieces(room, sourcePlayerId, "N"),
+			snapshotLocalPieces(target, targetPlayerId, "E")
+		);
 	});
 
 	it("replays exported game to the same final state", () => {
@@ -58,8 +57,7 @@ describe("serialize", () => {
 				parseSetupDocument({
 					format: "chessforces-setup",
 					version: 999,
-					gameMode: "2v2",
-					seats: { N: [], E: [], S: [], W: [] }
+					pieces: []
 				}),
 			/Unsupported setup version/
 		);
@@ -92,6 +90,23 @@ function snapshotPieces(room) {
 	}
 	rows.sort((a, b) => {
 		if (a.seat !== b.seat) return String(a.seat).localeCompare(String(b.seat));
+		if (a.type !== b.type) return a.type.localeCompare(b.type);
+		return a.slot - b.slot;
+	});
+	return rows;
+}
+
+function snapshotLocalPieces(room, playerId, seat) {
+	const rows = [];
+	for (const piece of room.pieces.values()) {
+		if (piece.ownerId !== playerId) continue;
+		rows.push({
+			type: piece.type,
+			slot: piece.slot ?? 0,
+			pos: toLocalPos(seat, piece.pos)
+		});
+	}
+	rows.sort((a, b) => {
 		if (a.type !== b.type) return a.type.localeCompare(b.type);
 		return a.slot - b.slot;
 	});
@@ -147,4 +162,20 @@ function pieceRefKey(ref) {
 
 function pieceKey(seat, type, slot) {
 	return `${seat}:${type}:${slot}`;
+}
+
+function toLocalPos(seat, pos) {
+	if (!pos) return null;
+	switch (seat) {
+		case "N":
+			return { depth: pos.r, lane: pos.c - 6 };
+		case "S":
+			return { depth: 16 - pos.r, lane: 10 - pos.c };
+		case "W":
+			return { depth: pos.c, lane: 10 - pos.r };
+		case "E":
+			return { depth: 16 - pos.c, lane: pos.r - 6 };
+		default:
+			return null;
+	}
 }

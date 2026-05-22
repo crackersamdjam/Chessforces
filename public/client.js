@@ -354,10 +354,13 @@ function render() {
 	$("readyBtn").disabled = !me || !me.seat || me.ready || !allMyPiecesPlaced;
 	$("unreadyBtn").disabled = !me || !me.seat || !me.ready;
 	const canUseSetupControls = state.phase === "lobby";
+	const canUseMySetupControls = canUseSetupControls && Boolean(me?.seat);
+	const mySetupControls = $("mySetupControls");
+	if (mySetupControls) mySetupControls.style.display = canUseMySetupControls ? "" : "none";
 	const downloadSetupBtn = $("downloadSetupBtn");
 	const uploadSetupBtn = $("uploadSetupBtn");
-	if (downloadSetupBtn) downloadSetupBtn.disabled = !canUseSetupControls;
-	if (uploadSetupBtn) uploadSetupBtn.disabled = !canUseSetupControls;
+	if (downloadSetupBtn) downloadSetupBtn.disabled = !canUseMySetupControls;
+	if (uploadSetupBtn) uploadSetupBtn.disabled = !canUseMySetupControls;
 	const downloadGameBtn = $("downloadGameBtn");
 	if (downloadGameBtn) downloadGameBtn.disabled = state.phase !== "done";
 	// Hide lobby controls (ready, randomize) once the game is under way.
@@ -835,8 +838,8 @@ function initRoom(roomId) {
 				setTimeout(() => setHint(""), 2500);
 				return;
 			}
-			downloadJsonFile(msg.setup, `setup-${roomId}.chessforces-setup.json`);
-			setHint("Setup file downloaded.");
+			downloadJsonFile(msg.setup, `my-setup-${roomId}.chessforces-setup.json`);
+			setHint("My setup file downloaded.");
 			setTimeout(() => setHint(""), 1500);
 			return;
 		}
@@ -855,7 +858,7 @@ function initRoom(roomId) {
 			if (!msg.ok) {
 				setHint(`⚠ ${msg.reason}`);
 			} else {
-				setHint("Setup imported.");
+				setHint("My setup imported.");
 			}
 			setTimeout(() => setHint(""), 2500);
 			return;

@@ -217,23 +217,20 @@ wss.on("connection", (ws, req) => {
 				safeSend(ws, { type: "setup_file", ok: false, reason: "Setup export is only available in the lobby." });
 				return;
 			}
-			for (const seat of SEATS) {
-				const seatPlayerId = room.seatToPlayerId.get(seat);
-				if (!seatPlayerId) {
-					safeSend(ws, { type: "setup_file", ok: false, reason: "All four seats must be occupied." });
-					return;
-				}
-				if (!allPiecesPlaced(room, seatPlayerId)) {
-					safeSend(ws, { type: "setup_file", ok: false, reason: "All pieces must be placed before setup export." });
-					return;
-				}
+			if (!player.seat) {
+				safeSend(ws, { type: "setup_file", ok: false, reason: "Take a seat before exporting your setup." });
+				return;
 			}
-			safeSend(ws, { type: "setup_file", ok: true, setup: exportSetup(room) });
+			if (!allPiecesPlaced(room, playerId)) {
+				safeSend(ws, { type: "setup_file", ok: false, reason: "Place all your pieces before exporting your setup." });
+				return;
+			}
+			safeSend(ws, { type: "setup_file", ok: true, setup: exportSetup(room, playerId) });
 			return;
 		}
 
 		if (msg.type === "import_setup") {
-			const result = applySetupToRoom(room, msg.setup ?? null);
+			const result = applySetupToRoom(room, playerId, msg.setup ?? null);
 			if (!result.ok) {
 				safeSend(ws, { type: "import_setup_result", ok: false, reason: result.reason });
 				return;
