@@ -33,11 +33,18 @@ app.disable("x-powered-by");
 
 const publicDir = path.join(__dirname, "public");
 app.use(express.static(publicDir, {
-	// Prevent browsers and proxies from serving stale JS/CSS after a deploy.
-	setHeaders(res, filePath) {
-		if (filePath.endsWith(".js") || filePath.endsWith(".css")) {
-			res.setHeader("Cache-Control", "no-cache");
-		}
+	// Keep the client shell fresh after deploys.
+	// This app is small, so favor correctness over asset caching.
+	//
+	// Future optimization: fingerprint static assets (for example,
+	// client.jc8934f9j834.js), then serve those with long-lived immutable
+	// cache headers while keeping HTML revalidated on each visit.
+	// This "fresh HTML + heavily cached hashed assets" pattern is what most
+	// production websites use to get fast loads without stale deploys.
+	setHeaders(res) {
+		res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+		res.setHeader("Pragma", "no-cache");
+		res.setHeader("Expires", "0");
 	}
 }));
 
