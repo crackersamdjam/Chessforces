@@ -29,14 +29,84 @@ function wsUrlFor(roomId) {
 /** @type {WebSocket|null} */
 let socket = null;
 
-/** @type {{playerId:string|null, seats:string[], state:any|null}} */
+/** @type {{playerId:string|null, seats:string[], state:any|null, liveState:any|null, historySnapshots:any[], historyCursor:number}} */
 const app = {
 	playerId: null,
 	seats: ["N", "E", "S", "W"],
-	state: null
+	state: null,
+	liveState: null,
+	historySnapshots: [],
+	historyCursor: 0
 };
 
 let selectedPieceId = null;
+
+function isPlayablePhase(phase) {
+	return phase === "play" || phase === "done";
+}
+
+function cloneState(state) {
+	return JSON.parse(JSON.stringify(state));
+}
+
+function moveKey(state) {
+	if (!state) return "";
+	const move = state.lastMove;
+	if (!move) return `${state.phase}:nomove`;
+	const from = move.from ? `${move.from.r},${move.from.c}` : "?,?";
+	const to = move.to ? `${move.to.r},${move.to.c}` : "?,?";
+	return `${state.phase}:${move.by ?? "?"}:${move.pieceId ?? "?"}:${from}->${to}`;
+}
+
+function isViewingHistory() {
+	return app.historySnapshots.length > 0 && app.historyCursor < app.historySnapshots.length - 1;
+}
+
+function syncHistoryWithLiveState(nextState) {
+	if (!isPlayablePhase(nextState.phase)) {
+		app.historySnapshots = [];
+		app.historyCursor = 0;
+		app.state = nextState;
+		return;
+	}
+
+	const nextSnapshot = cloneState(nextState);
+	if (app.historySnapshots.length === 0) {
+		app.historySnapshots = [nextSnapshot];
+		app.historyCursor = 0;
+		app.state = nextSnapshot;
+		return;
+	}
+
+	const wasAtLatest = app.historyCursor === app.historySnapshots.length - 1;
+	const lastSnapshot = app.historySnapshots[app.historySnapshots.length - 1];
+	if (moveKey(lastSnapshot) === moveKey(nextState)) {
+		app.historySnapshots[app.historySnapshots.length - 1] = nextSnapshot;
+	} else {
+		app.historySnapshots.push(nextSnapshot);
+		const maxSnapshots = 512;
+		if (app.historySnapshots.length > maxSnapshots) {
+			const overflow = app.historySnapshots.length - maxSnapshots;
+			app.historySnapshots.splice(0, overflow);
+			app.historyCursor = Math.max(0, app.historyCursor - overflow);
+		}
+	}
+
+	if (wasAtLatest) {
+		app.historyCursor = app.historySnapshots.length - 1;
+	}
+	app.state = app.historySnapshots[app.historyCursor];
+}
+
+function stepHistory(delta) {
+	if (!app.historySnapshots.length) return;
+	selectedPieceId = null;
+	setHint("");
+	const next = app.historyCursor + delta;
+	app.historyCursor = Math.max(0, Math.min(app.historySnapshots.length - 1, next));
+	app.state = app.historySnapshots[app.historyCursor];
+	render();
+}
 
 // Cached DOM views so we don't rebuild the whole screen every update.
 /** @type {Map<string, {card:HTMLElement, nameEl:HTMLElement, statusEl:HTMLElement, btn:HTMLButtonElement}>} */
@@ -312,6 +382,38 @@ function ensureBoardViews(state) {
 	}
 }
 
+function renderHistoryControls(state, liveState) {
+	const controls = $("historyControls");
+	if (!controls) return;
+	if (!state || !liveState || !isPlayablePhase(liveState.phase)) {
+		controls.classList.add("hidden");
+		return;
+	}
+	controls.classList.remove("hidden");
+
+	const totalMoves = Math.max(0, app.historySnapshots.length - 1);
+	const currentMove = Math.min(totalMoves, app.historyCursor);
+	const viewingHistory = isViewingHistory();
+
+	const backBtn = $("historyBackBtn");
+	const forwardBtn = $("historyForwardBtn");
+	const liveBtn = $("historyLiveBtn");
+	const historyLine = $("historyLine");
+
+	if (backBtn) backBtn.disabled = app.historyCursor <= 0;
+	if (forwardBtn) forwardBtn.disabled = app.historyCursor >= app.historySnapshots.length - 1;
+	if (liveBtn) {
+		const atLatest = !viewingHistory;
+		liveBtn.disabled = atLatest;
+		liveBtn.classList.toggle("active", atLatest);
+	}
+	if (historyLine) {
+		historyLine.textContent = viewingHistory
+			? `History: move ${currentMove}/${totalMoves}`
+			: `Live: move ${currentMove}/${totalMoves}`;
+	}
+}
+
 function render() {
 	const state = app.state;
 	if (!state) {
@@ -319,6 +421,7 @@ function render() {
 		// this avoids flicker between transient connection messages.
 		return;
 	}
+	const liveState = app.liveState ?? state;
 
 	const me = state.players.find((p) => p.id === app.playerId) || null;
 
@@ -345,6 +448,7 @@ function render() {
 	ensureSeatViews();
 	ensureBoardViews(state);
 	applyPerspective(state);
+	renderHistoryControls(state, liveState);
 
 	renderSeats(state);
 	renderBoard(state);
@@ -362,9 +466,9 @@ function render() {
 	if (downloadSetupBtn) downloadSetupBtn.disabled = !canUseMySetupControls;
 	if (uploadSetupBtn) uploadSetupBtn.disabled = !canUseMySetupControls;
 	const downloadGameBtn = $("downloadGameBtn");
-	if (downloadGameBtn) downloadGameBtn.disabled = state.phase !== "done";
+	if (downloadGameBtn) downloadGameBtn.disabled = liveState.phase !== "done";
 	// Hide lobby controls (ready, randomize) once the game is under way.
-	const inPlay = state.phase === "play" || state.phase === "done";
+	const inPlay = liveState.phase === "play" || liveState.phase === "done";
 	const lobbyEl = $("lobbyControls");
 	if (lobbyEl) lobbyEl.style.display = inPlay ? "none" : "";
 }
@@ -488,7 +592,13 @@ function canPlaceAt(state, piece, pos) {
 }
 
 function onCellClick(pos) {
-	const state = app.state;
+	if (isViewingHistory()) {
+		setHint("Viewing history. Click Live to return before making a move.");
+		setTimeout(() => setHint(""), 1800);
+		return;
+	}
+
+	const state = app.liveState ?? app.state;
 	if (!state) return;
 
 	const clickedPiece = state.pieces.find(
@@ -800,10 +910,11 @@ function initRoom(roomId) {
 			return;
 		}
 		if (msg.type === "state") {
-			const prevPhase = app.state?.phase;
-			app.state = msg.state;
+			const prevPhase = app.liveState?.phase;
+			app.liveState = msg.state;
+			syncHistoryWithLiveState(msg.state);
 			// If selected piece got removed (bomb), clear selection.
-			if (selectedPieceId && !app.state.pieces.some((p) => p.id === selectedPieceId)) {
+			if (selectedPieceId && !app.liveState.pieces.some((p) => p.id === selectedPieceId)) {
 				selectedPieceId = null;
 			}
 			// Auto-randomize as soon as the player takes a seat in the lobby.
@@ -932,6 +1043,20 @@ function initRoom(roomId) {
 	});
 	$("downloadGameBtn").addEventListener("click", () => {
 		send({ type: "export_game" });
+	});
+	$("historyBackBtn").addEventListener("click", () => {
+		stepHistory(-1);
+	});
+	$("historyForwardBtn").addEventListener("click", () => {
+		stepHistory(1);
+	});
+	$("historyLiveBtn").addEventListener("click", () => {
+		if (!app.historySnapshots.length) return;
+		selectedPieceId = null;
+		setHint("");
+		app.historyCursor = app.historySnapshots.length - 1;
+		app.state = app.historySnapshots[app.historyCursor];
+		render();
 	});
 
 	$("debugBtn").addEventListener("click", () => {

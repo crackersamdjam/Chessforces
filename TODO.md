@@ -1,1 +1,2 @@
-use the bot logic from playthrough tests to play against bot players
+- use the bot logic from playthrough tests to play against bot players
+- allow browsing back and forward in current game move history

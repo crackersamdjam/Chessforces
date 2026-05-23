@@ -307,6 +307,12 @@ body {
 	margin-top: 8px;
 }
 
+.historyLine {
+	flex: 1;
+	align-self: center;
+	font-size: 13px;
+}
+
 .playbackLayout {
 	grid-template-columns: 320px 1fr;
 }
