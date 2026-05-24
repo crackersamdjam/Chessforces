@@ -21,9 +21,32 @@ function isPlaybackPath() {
 	return location.pathname === "/playback";
 }
 
-function wsUrlFor(roomId) {
+function wsUrlFor(roomId, sessionToken = "") {
 	const proto = location.protocol === "https:" ? "wss:" : "ws:";
-	return `${proto}//${location.host}/ws/room/${roomId}`;
+	const base = `${proto}//${location.host}/ws/room/${roomId}`;
+	if (!sessionToken) return base;
+	return `${base}?session=${encodeURIComponent(sessionToken)}`;
+}
+
+function sessionStorageKey(roomId) {
+	return `chessforces:session:${roomId}`;
+}
+
+function readSessionToken(roomId) {
+	try {
+		return localStorage.getItem(sessionStorageKey(roomId)) || "";
+	} catch {
+		return "";
+	}
+}
+
+function writeSessionToken(roomId, token) {
+	if (!token) return;
+	try {
+		localStorage.setItem(sessionStorageKey(roomId), token);
+	} catch {
+		// Ignore storage failures (private mode / storage disabled).
+	}
 }
 
 /** @type {WebSocket|null} */
@@ -494,8 +517,13 @@ function renderSeats(state) {
 			view.statusEl.classList.add("eliminated");
 		} else {
 			view.statusEl.classList.remove("eliminated");
-			view.statusEl.textContent = occupied ? (p.ready ? "Ready" : "Not ready") : "—";
-			view.statusEl.classList.toggle("ready", !!p?.ready);
+			const connected = p?.connected !== false;
+			view.statusEl.textContent = occupied
+				? connected
+					? (p.ready ? "Ready" : "Not ready")
+					: "Reconnecting..."
+				: "—";
+			view.statusEl.classList.toggle("ready", !!p?.ready && connected);
 		}
 
 		const gameActive = state.phase === "play" || state.phase === "done";
@@ -881,106 +909,153 @@ function initRoom(roomId) {
 	$("playbackView").classList.add("hidden");
 	$("roomId").textContent = roomId;
 
-	socket = new WebSocket(wsUrlFor(roomId));
+	let reconnectTimer = null;
+	let reconnectAttempts = 0;
 
-	socket.addEventListener("open", () => {
-		setHint(
-			"Pick a seat — pieces will be placed automatically. Click Ready when done. (Game will start automatically when all present players are ready)"
-		);
-		render();
-	});
+	function clearReconnectTimer() {
+		if (!reconnectTimer) return;
+		clearTimeout(reconnectTimer);
+		reconnectTimer = null;
+	}
 
-	socket.addEventListener("close", () => {
-		render();
-	});
+	function connectSocket() {
+		const sessionToken = readSessionToken(roomId);
+		const wasReconnecting = reconnectAttempts > 0;
+		socket = new WebSocket(wsUrlFor(roomId, sessionToken));
+		const currentSocket = socket;
 
-	socket.addEventListener("message", (ev) => {
-		let msg;
-		try {
-			msg = JSON.parse(String(ev.data));
-		} catch {
-			return;
-		}
-		if (!msg || typeof msg.type !== "string") return;
-
-		if (msg.type === "hello") {
-			app.playerId = msg.playerId;
-			app.seats = msg.seats || ["N", "E", "S", "W"];
-			render();
-			return;
-		}
-		if (msg.type === "state") {
-			const prevPhase = app.liveState?.phase;
-			app.liveState = msg.state;
-			syncHistoryWithLiveState(msg.state);
-			// If selected piece got removed (bomb), clear selection.
-			if (selectedPieceId && !app.liveState.pieces.some((p) => p.id === selectedPieceId)) {
-				selectedPieceId = null;
+		currentSocket.addEventListener("open", () => {
+			if (socket !== currentSocket) return;
+			clearReconnectTimer();
+			reconnectAttempts = 0;
+			if (wasReconnecting) {
+				setHint("Connection restored.");
+				setTimeout(() => setHint(""), 1500);
+			} else if (!app.liveState) {
+				setHint(
+					"Pick a seat — pieces will be placed automatically. Click Ready when done. (Game will start automatically when all present players are ready)"
+				);
 			}
-			// Auto-randomize as soon as the player takes a seat in the lobby.
-			if (msg.state.phase === "lobby") {
-				const me = msg.state.players.find((p) => p.id === app.playerId);
-				if (me?.seat && me.seat !== autoPlacedSeat) {
-					autoPlacedSeat = me.seat;
-					scheduleAutoRandomize();
+			render();
+		});
+
+		currentSocket.addEventListener("close", () => {
+			if (socket !== currentSocket) return;
+			render();
+			if (reconnectTimer) return;
+			const delayMs = Math.min(10000, 1000 * (2 ** Math.min(reconnectAttempts, 4)));
+			reconnectAttempts += 1;
+			setHint(`Connection lost. Reconnecting in ${Math.ceil(delayMs / 1000)}s...`);
+			reconnectTimer = setTimeout(() => {
+				reconnectTimer = null;
+				connectSocket();
+			}, delayMs);
+		});
+
+		currentSocket.addEventListener("message", (ev) => {
+			let msg;
+			try {
+				msg = JSON.parse(String(ev.data));
+			} catch {
+				return;
+			}
+			if (!msg || typeof msg.type !== "string") return;
+
+			if (msg.type === "hello") {
+				app.playerId = msg.playerId;
+				app.seats = msg.seats || ["N", "E", "S", "W"];
+				if (typeof msg.reconnectToken === "string") {
+					writeSessionToken(roomId, msg.reconnectToken);
 				}
+				render();
+				return;
 			}
-			// Show hint on phase transitions.
-			if (prevPhase !== msg.state.phase) {
-				if (msg.state.phase === "play") setHint("Game started. On your turn, select one of your pieces and move.");
+			if (msg.type === "state") {
+				const prevPhase = app.liveState?.phase;
+				app.liveState = msg.state;
+				syncHistoryWithLiveState(msg.state);
+				// If selected piece got removed (bomb), clear selection.
+				if (selectedPieceId && !app.liveState.pieces.some((p) => p.id === selectedPieceId)) {
+					selectedPieceId = null;
+				}
+				// Auto-randomize as soon as the player takes a seat in the lobby.
+				if (msg.state.phase === "lobby") {
+					const me = msg.state.players.find((p) => p.id === app.playerId);
+					if (me?.seat && me.seat !== autoPlacedSeat) {
+						autoPlacedSeat = me.seat;
+						scheduleAutoRandomize();
+					}
+				}
+				// Show hint on phase transitions.
+				if (prevPhase !== msg.state.phase) {
+					if (msg.state.phase === "play") setHint("Game started. On your turn, select one of your pieces and move.");
+				}
+				render();
+				return;
 			}
-			render();
-			return;
-		}
-		if (msg.type === "move_result") {
-			if (!msg.ok) {
-				setHint(`⚠ ${msg.reason}`);
-				setTimeout(() => setHint(""), 2500);
+			if (msg.type === "move_result") {
+				if (!msg.ok) {
+					setHint(`⚠ ${msg.reason}`);
+					setTimeout(() => setHint(""), 2500);
+				}
+				return;
 			}
-			return;
-		}
-		if (msg.type === "chat") {
-			addChatLine(msg);
-			return;
-		}
-		if (msg.type === "setup_file") {
-			if (!msg.ok) {
-				setHint(`⚠ ${msg.reason}`);
+			if (msg.type === "chat") {
+				addChatLine(msg);
+				return;
+			}
+			if (msg.type === "setup_file") {
+				if (!msg.ok) {
+					setHint(`⚠ ${msg.reason}`);
+					setTimeout(() => setHint(""), 2500);
+					return;
+				}
+				downloadJsonFile(msg.setup, `my-setup-${roomId}.chessforces-setup.json`);
+				setHint("My setup file downloaded.");
+				setTimeout(() => setHint(""), 1500);
+				return;
+			}
+			if (msg.type === "game_file") {
+				if (!msg.ok) {
+					setHint(`⚠ ${msg.reason}`);
+					setTimeout(() => setHint(""), 2500);
+					return;
+				}
+				downloadJsonFile(msg.game, `game-${roomId}.chessforces-game.json`);
+				setHint("Game file downloaded.");
+				setTimeout(() => setHint(""), 1500);
+				return;
+			}
+			if (msg.type === "import_setup_result") {
+				if (!msg.ok) {
+					setHint(`⚠ ${msg.reason}`);
+				} else {
+					setHint("My setup imported.");
+				}
 				setTimeout(() => setHint(""), 2500);
 				return;
 			}
-			downloadJsonFile(msg.setup, `my-setup-${roomId}.chessforces-setup.json`);
-			setHint("My setup file downloaded.");
-			setTimeout(() => setHint(""), 1500);
-			return;
-		}
-		if (msg.type === "game_file") {
-			if (!msg.ok) {
-				setHint(`⚠ ${msg.reason}`);
-				setTimeout(() => setHint(""), 2500);
+			if (msg.type === "phase") {
+				// Legacy handler kept for forward-compatibility; server now sends state instead.
+				if (msg.phase === "play") setHint("Game started. Select one of your pieces and move.");
+				render();
 				return;
 			}
-			downloadJsonFile(msg.game, `game-${roomId}.chessforces-game.json`);
-			setHint("Game file downloaded.");
-			setTimeout(() => setHint(""), 1500);
-			return;
-		}
-		if (msg.type === "import_setup_result") {
-			if (!msg.ok) {
-				setHint(`⚠ ${msg.reason}`);
-			} else {
-				setHint("My setup imported.");
-			}
-			setTimeout(() => setHint(""), 2500);
-			return;
-		}
-		if (msg.type === "phase") {
-			// Legacy handler kept for forward-compatibility; server now sends state instead.
-			if (msg.phase === "play") setHint("Game started. Select one of your pieces and move.");
-			render();
-			return;
-		}
+		});
+	}
+
+	window.addEventListener("online", () => {
+		if (socket?.readyState === WebSocket.OPEN) return;
+		if (reconnectTimer) return;
+		connectSocket();
 	});
+	document.addEventListener("visibilitychange", () => {
+		if (document.visibilityState !== "visible") return;
+		if (socket?.readyState === WebSocket.OPEN) return;
+		clearReconnectTimer();
+		connectSocket();
+	});
+	connectSocket();
 
 	$("copyLinkBtn").addEventListener("click", async () => {
 		try {

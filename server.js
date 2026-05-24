@@ -63,13 +63,17 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 const rooms = new Map();
+const disconnectTimers = new Map();
+const RECONNECT_GRACE_MS = process.env.RECONNECT_GRACE_MS
+	? Number(process.env.RECONNECT_GRACE_MS)
+	: 45000;
 
 function nowMs() {
 	return Date.now();
 }
 
 function safeSend(ws, obj) {
-	if (ws.readyState !== ws.OPEN) return;
+	if (!ws || ws.readyState !== ws.OPEN) return;
 	ws.send(JSON.stringify(obj));
 }
 
@@ -92,6 +96,65 @@ function getOrCreateRoom(roomId) {
 	return room;
 }
 
+function disconnectTimerKey(roomId, playerId) {
+	return `${roomId}:${playerId}`;
+}
+
+function clearDisconnectTimer(roomId, playerId) {
+	const key = disconnectTimerKey(roomId, playerId);
+	const timer = disconnectTimers.get(key);
+	if (timer) {
+		clearTimeout(timer);
+		disconnectTimers.delete(key);
+	}
+}
+
+function finalizeDisconnectedPlayer(room, playerId) {
+	const player = room.players.get(playerId);
+	if (!player) return;
+	clearDisconnectTimer(room.id, playerId);
+	room.players.delete(playerId);
+	room.updatedAt = nowMs();
+
+	if (room.players.size === 0) {
+		rooms.delete(room.id);
+		return;
+	}
+
+	if (room.phase === PHASES.PLAY && player.seat) {
+		eliminatePlayer(room, player.seat);
+		if (room.turnSeat === player.seat) {
+			room.turnSeat = nextOccupiedSeat(room, player.seat);
+		}
+		checkForWin(room);
+	} else {
+		if (player.seat) room.seatToPlayerId.delete(player.seat);
+		for (const [pid, piece] of room.pieces) {
+			if (piece.ownerId === playerId) room.pieces.delete(pid);
+		}
+	}
+
+	broadcast(room, { type: "presence" });
+	broadcastState(room);
+}
+
+function scheduleDisconnectFinalization(room, playerId) {
+	const player = room.players.get(playerId);
+	if (!player) return;
+	player.disconnectedAt = nowMs();
+	clearDisconnectTimer(room.id, playerId);
+	const key = disconnectTimerKey(room.id, playerId);
+	const timer = setTimeout(() => {
+		disconnectTimers.delete(key);
+		const liveRoom = rooms.get(room.id);
+		if (!liveRoom) return;
+		const livePlayer = liveRoom.players.get(playerId);
+		if (!livePlayer || !livePlayer.disconnectedAt) return;
+		finalizeDisconnectedPlayer(liveRoom, playerId);
+	}, RECONNECT_GRACE_MS);
+	disconnectTimers.set(key, timer);
+}
+
 wss.on("connection", (ws, req) => {
 	const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 	const parts = url.pathname.split("/").filter(Boolean);
@@ -102,22 +165,50 @@ wss.on("connection", (ws, req) => {
 	}
 
 	const room = getOrCreateRoom(roomId);
-	const playerId = nanoid(10);
+	const reconnectToken = String(url.searchParams.get("session") ?? "").trim();
+	let player = null;
+	if (reconnectToken) {
+		for (const candidate of room.players.values()) {
+			if (candidate.reconnectToken === reconnectToken) {
+				player = candidate;
+				break;
+			}
+		}
+	}
 
-	const player = {
-		id: playerId,
-		ws,
-		name: `Player-${playerId.slice(0, 4)}`,
-		seat: null,
-		ready: false,
-		joinedAt: nowMs()
-	};
-	room.players.set(playerId, player);
+	if (player) {
+		if (player.ws && player.ws !== ws && player.ws.readyState === player.ws.OPEN) {
+			player.ws.close(4001, "Reconnected elsewhere");
+		}
+		player.ws = ws;
+		player.disconnectedAt = null;
+		clearDisconnectTimer(room.id, player.id);
+	} else {
+		const playerId = nanoid(10);
+		player = {
+			id: playerId,
+			ws,
+			name: `Player-${playerId.slice(0, 4)}`,
+			seat: null,
+			ready: false,
+			joinedAt: nowMs(),
+			disconnectedAt: null,
+			reconnectToken: reconnectToken || nanoid(18)
+		};
+		room.players.set(playerId, player);
+	}
 	room.updatedAt = nowMs();
 
-	safeSend(ws, { type: "hello", playerId, seats: SEATS });
-	safeSend(ws, { type: "state", state: roomSnapshotFor(room, playerId) });
+	safeSend(ws, {
+		type: "hello",
+		playerId: player.id,
+		seats: SEATS,
+		reconnectToken: player.reconnectToken,
+		reconnectGraceMs: RECONNECT_GRACE_MS
+	});
+	safeSend(ws, { type: "state", state: roomSnapshotFor(room, player.id) });
 	broadcast(room, { type: "presence" });
+	broadcastState(room);
 
 	ws.on("message", (raw) => {
 		let msg;
@@ -146,8 +237,8 @@ wss.on("connection", (ws, req) => {
 				player.ready = false;
 			}
 			player.seat = seat;
-			room.seatToPlayerId.set(seat, playerId);
-			ensurePieceSet(room, playerId);
+			room.seatToPlayerId.set(seat, player.id);
+			ensurePieceSet(room, player.id);
 			broadcast(room, { type: "presence" });
 			for (const [pid, p] of room.players) {
 				safeSend(p.ws, { type: "state", state: roomSnapshotFor(room, pid) });
@@ -169,7 +260,7 @@ wss.on("connection", (ws, req) => {
 
 		if (msg.type === "set_ready") {
 			const wantsReady = Boolean(msg.ready);
-			if (wantsReady && !allPiecesPlaced(room, playerId)) return;
+			if (wantsReady && !allPiecesPlaced(room, player.id)) return;
 			player.ready = wantsReady;
 			for (const [pid, p] of room.players) {
 				safeSend(p.ws, { type: "state", state: roomSnapshotFor(room, pid) });
@@ -181,7 +272,7 @@ wss.on("connection", (ws, req) => {
 		}
 
 		if (msg.type === "place_piece") {
-			const result = applyPlacement(room, playerId, String(msg.pieceId ?? ""), msg.pos ?? null);
+			const result = applyPlacement(room, player.id, String(msg.pieceId ?? ""), msg.pos ?? null);
 			if (!result.ok) return;
 			for (const [pid] of room.players) {
 				safeSend(room.players.get(pid).ws, { type: "state", state: roomSnapshotFor(room, pid) });
@@ -193,7 +284,7 @@ wss.on("connection", (ws, req) => {
 		}
 
 		if (msg.type === "move") {
-			const result = applyMove(room, playerId, String(msg.pieceId ?? ""), msg.to ?? null);
+			const result = applyMove(room, player.id, String(msg.pieceId ?? ""), msg.to ?? null);
 			if (!result.ok) {
 				safeSend(ws, { type: "move_result", ok: false, reason: result.reason });
 				return;
@@ -212,7 +303,7 @@ wss.on("connection", (ws, req) => {
 			if (!text) return;
 			broadcast(room, {
 				type: "chat",
-				from: { id: playerId, name: player.name, seat: player.seat },
+				from: { id: player.id, name: player.name, seat: player.seat },
 				text,
 				at: nowMs()
 			});
@@ -228,16 +319,16 @@ wss.on("connection", (ws, req) => {
 				safeSend(ws, { type: "setup_file", ok: false, reason: "Take a seat before exporting your setup." });
 				return;
 			}
-			if (!allPiecesPlaced(room, playerId)) {
+			if (!allPiecesPlaced(room, player.id)) {
 				safeSend(ws, { type: "setup_file", ok: false, reason: "Place all your pieces before exporting your setup." });
 				return;
 			}
-			safeSend(ws, { type: "setup_file", ok: true, setup: exportSetup(room, playerId) });
+			safeSend(ws, { type: "setup_file", ok: true, setup: exportSetup(room, player.id) });
 			return;
 		}
 
 		if (msg.type === "import_setup") {
-			const result = applySetupToRoom(room, playerId, msg.setup ?? null);
+			const result = applySetupToRoom(room, player.id, msg.setup ?? null);
 			if (!result.ok) {
 				safeSend(ws, { type: "import_setup_result", ok: false, reason: result.reason });
 				return;
@@ -258,31 +349,13 @@ wss.on("connection", (ws, req) => {
 	});
 
 	ws.on("close", () => {
-		room.players.delete(playerId);
+		// Ignore stale close events from a socket that was replaced by a reconnect.
+		if (player.ws !== ws) return;
+		player.ws = null;
 		room.updatedAt = nowMs();
-
-		if (room.players.size === 0) {
-			rooms.delete(room.id);
-			return;
-		}
-
-		if (room.phase === PHASES.PLAY && player.seat) {
-			eliminatePlayer(room, player.seat);
-			if (room.turnSeat === player.seat) {
-				room.turnSeat = nextOccupiedSeat(room, player.seat);
-			}
-			checkForWin(room);
-		} else {
-			if (player.seat) room.seatToPlayerId.delete(player.seat);
-			for (const [pid, piece] of room.pieces) {
-				if (piece.ownerId === playerId) room.pieces.delete(pid);
-			}
-		}
-
+		scheduleDisconnectFinalization(room, player.id);
 		broadcast(room, { type: "presence" });
-		for (const [pid] of room.players) {
-			safeSend(room.players.get(pid).ws, { type: "state", state: roomSnapshotFor(room, pid) });
-		}
+		broadcastState(room);
 	});
 });
 
