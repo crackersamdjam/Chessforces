@@ -63,6 +63,7 @@ const app = {
 };
 
 let selectedPieceId = null;
+let turnCountdownInterval = null;
 
 function isPlayablePhase(phase) {
 	return phase === "play" || phase === "done";
@@ -166,10 +167,71 @@ function formatTime(ms) {
 	return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function turnDurationSecondsFromState(state) {
+	const ms = Number(state?.turnDurationMs);
+	if (!Number.isFinite(ms) || ms <= 0) return 30;
+	return Math.max(1, Math.floor(ms / 1000));
+}
+
 function setHint(text) {
 	const hint = $("hint");
 	if (!hint) return;
 	hint.textContent = text || "";
+}
+
+function remainingTurnSeconds(state) {
+	if (!state?.turnDeadlineAt) return null;
+	return Math.max(0, Math.ceil((state.turnDeadlineAt - Date.now()) / 1000));
+}
+
+function renderTurnLine(state, me) {
+	const turnLine = $("turnLine");
+	if (!turnLine) return;
+	turnLine.classList.remove("turnLine--mine", "turnLine--other", "turnLine--critical");
+
+	if (state.phase === "done") {
+		if (state.winnerTeam) {
+			const teamLabels = { NS: "North & South", EW: "East & West" };
+			const label = teamLabels[state.winnerTeam] ?? seatLabel(state.winnerTeam);
+			turnLine.textContent = `Game over. ${label} wins!`;
+		} else {
+			turnLine.textContent = "Game over. Draw.";
+		}
+		return;
+	}
+
+	if (state.phase !== "play") {
+		turnLine.textContent = "";
+		return;
+	}
+
+	const isMyTurn = me?.seat && state.turnSeat === me.seat;
+	const secondsLeft = remainingTurnSeconds(state);
+	const timeSuffix = Number.isInteger(secondsLeft) ? ` - ${secondsLeft}s left` : "";
+	turnLine.textContent = isMyTurn
+		? `Your Turn${timeSuffix}!`
+		: `Turn: ${state.turnSeat ? seatLabel(state.turnSeat) : "-"}${timeSuffix}`;
+	turnLine.classList.add(isMyTurn ? "turnLine--mine" : "turnLine--other");
+	if (Number.isInteger(secondsLeft) && secondsLeft <= 10) {
+		turnLine.classList.add("turnLine--critical");
+	}
+}
+
+function syncTurnCountdown(state) {
+	const shouldTick = state?.phase === "play" && Number.isFinite(state?.turnDeadlineAt);
+	if (!shouldTick) {
+		if (turnCountdownInterval) {
+			clearInterval(turnCountdownInterval);
+			turnCountdownInterval = null;
+		}
+		return;
+	}
+	if (turnCountdownInterval) return;
+	turnCountdownInterval = setInterval(() => {
+		if (!app.state) return;
+		const me = app.state.players.find((p) => p.id === app.playerId) || null;
+		renderTurnLine(app.state, me);
+	}, 250);
 }
 
 function ensureSeatViews() {
@@ -451,27 +513,26 @@ function render() {
 	$("phaseLine").textContent = `Phase: ${state.phase}`;
 	const modeLine = $("modeLine");
 	if (modeLine) modeLine.textContent = formatGameMode(state);
-	if (state.phase === "done") {
-		if (state.winnerTeam) {
-			const teamLabels = { NS: "North & South", EW: "East & West" };
-			const label = teamLabels[state.winnerTeam] ?? seatLabel(state.winnerTeam);
-			$("turnLine").textContent = `Game over. ${label} wins!`;
-		} else {
-			$("turnLine").textContent = "Game over. Draw.";
-		}
-	} else if (state.phase === "play") {
-		const isMyTurn = me?.seat && state.turnSeat === me.seat;
-		$("turnLine").textContent = isMyTurn
-			? "Your Turn!"
-			: `Turn: ${state.turnSeat ? seatLabel(state.turnSeat) : "-"}`;
-	} else {
-		$("turnLine").textContent = "";
-	}
+	renderTurnLine(state, me);
+	syncTurnCountdown(state);
 
 	ensureSeatViews();
 	ensureBoardViews(state);
 	applyPerspective(state);
 	renderHistoryControls(state, liveState);
+
+	const turnDurationInput = $("turnDurationInput");
+	const saveTurnDurationBtn = $("saveTurnDurationBtn");
+	const turnSeconds = turnDurationSecondsFromState(state);
+	if (turnDurationInput && document.activeElement !== turnDurationInput) {
+		turnDurationInput.value = String(turnSeconds);
+	}
+	if (turnDurationInput) {
+		turnDurationInput.disabled = state.phase !== "lobby";
+	}
+	if (saveTurnDurationBtn) {
+		saveTurnDurationBtn.disabled = state.phase !== "lobby";
+	}
 
 	renderSeats(state);
 	renderBoard(state);
@@ -1035,6 +1096,20 @@ function initRoom(roomId) {
 				setTimeout(() => setHint(""), 2500);
 				return;
 			}
+			if (msg.type === "turn_duration_result") {
+				if (!msg.ok) {
+					setHint(`⚠ ${msg.reason}`);
+					setTimeout(() => setHint(""), 2500);
+					return;
+				}
+				const seconds = Number(msg.seconds);
+				const safeSeconds = Number.isFinite(seconds) && seconds > 0
+					? Math.floor(seconds)
+					: turnDurationSecondsFromState(app.state);
+				setHint(`Turn timer set to ${safeSeconds}s.`);
+				setTimeout(() => setHint(""), 1500);
+				return;
+			}
 			if (msg.type === "phase") {
 				// Legacy handler kept for forward-compatibility; server now sends state instead.
 				if (msg.phase === "play") setHint("Game started. Select one of your pieces and move.");
@@ -1077,6 +1152,23 @@ function initRoom(roomId) {
 
 	$("readyBtn").addEventListener("click", () => send({ type: "set_ready", ready: true }));
 	$("unreadyBtn").addEventListener("click", () => send({ type: "set_ready", ready: false }));
+
+	function sendTurnDuration() {
+		const input = $("turnDurationInput");
+		if (!input) return;
+		const seconds = Number(input.value);
+		if (!Number.isFinite(seconds) || !Number.isInteger(seconds) || seconds < 1 || seconds > 60) {
+			setHint("⚠ Turn timer must be a whole number between 1 and 60 seconds.");
+			setTimeout(() => setHint(""), 2500);
+			return;
+		}
+		send({ type: "set_turn_duration", seconds });
+	}
+
+	$("saveTurnDurationBtn").addEventListener("click", sendTurnDuration);
+	$("turnDurationInput").addEventListener("keydown", (e) => {
+		if (e.key === "Enter") sendTurnDuration();
+	});
 
 	function sendChat() {
 		const text = $("chatInput").value.trim();

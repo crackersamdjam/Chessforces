@@ -322,6 +322,34 @@ body {
 	align-items: baseline;
 	margin-bottom: 10px;
 }
+.turnLine {
+	font-size: 14px;
+	font-weight: 700;
+	padding: 4px 10px;
+	border-radius: 999px;
+	border: 1px solid var(--border);
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--text);
+	min-height: 28px;
+	display: flex;
+	align-items: center;
+}
+.turnLine:empty {
+	visibility: hidden;
+}
+.turnLine--mine {
+	background: color-mix(in srgb, var(--accent2) 24%, transparent);
+	border-color: color-mix(in srgb, var(--accent2) 65%, transparent);
+}
+.turnLine--other {
+	background: color-mix(in srgb, var(--accent) 18%, transparent);
+	border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+}
+.turnLine--critical {
+	background: color-mix(in srgb, var(--danger) 28%, transparent);
+	border-color: color-mix(in srgb, var(--danger) 70%, transparent);
+	color: #fff3f3;
+}
 
 .board {
 	position: relative;

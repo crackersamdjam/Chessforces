@@ -35,7 +35,7 @@ async function playAggressiveMove(page, seat) {
 
 async function isMyTurn(page) {
 	return page.evaluate(
-		() => (document.querySelector("#turnLine")?.textContent ?? "").includes("Your Turn!")
+		() => /^Your Turn\b/.test((document.querySelector("#turnLine")?.textContent ?? "").trim())
 	);
 }
 

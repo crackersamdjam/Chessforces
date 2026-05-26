@@ -24,7 +24,7 @@ async function run() {
 	}
 
 	await start2v2Play(players);
-	await Promise.all(players.map((p) => expectText(p.page, "#turnLine", /Turn:|Your Turn!/)));
+	await Promise.all(players.map((p) => expectText(p.page, "#turnLine", /Turn:|Your Turn\b/)));
 
 	// One full round of moves (N → E → S → W).
 	for (let i = 0; i < players.length; i++) {

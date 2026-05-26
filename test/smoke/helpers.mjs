@@ -285,7 +285,7 @@ export async function shufflePlacement(page, seat, count = 3) {
 
 export async function waitForMyTurn(page, timeout = 30_000) {
 	await page.waitForFunction(
-		() => (document.querySelector("#turnLine")?.textContent ?? "").includes("Your Turn!"),
+		() => /^Your Turn\b/.test((document.querySelector("#turnLine")?.textContent ?? "").trim()),
 		{ timeout }
 	);
 }
@@ -307,7 +307,7 @@ export async function playOneMove(page, seat) {
 
 export async function waitForTurnToEnd(page, timeout = 15_000) {
 	await page.waitForFunction(
-		() => !(document.querySelector("#turnLine")?.textContent ?? "").includes("Your Turn!"),
+		() => !/^Your Turn\b/.test((document.querySelector("#turnLine")?.textContent ?? "").trim()),
 		{ timeout }
 	);
 }

@@ -7,6 +7,9 @@ import { nanoid } from "nanoid";
 import {
 	SEATS,
 	PHASES,
+	DEFAULT_TURN_DURATION_MS,
+	MIN_TURN_DURATION_SEC,
+	MAX_TURN_DURATION_SEC,
 	applyMove,
 	applyPlacement,
 	allPiecesPlaced,
@@ -16,6 +19,7 @@ import {
 	maybeAdvancePhase,
 	nextOccupiedSeat,
 	checkForWin,
+	resetTurnTimer,
 	roomSnapshotFor,
 	applySetupToRoom,
 	exportSetup,
@@ -67,6 +71,10 @@ const disconnectTimers = new Map();
 const RECONNECT_GRACE_MS = process.env.RECONNECT_GRACE_MS
 	? Number(process.env.RECONNECT_GRACE_MS)
 	: 45000;
+const TURN_TIMEOUT_MS = process.env.TURN_TIMEOUT_MS
+	? Number(process.env.TURN_TIMEOUT_MS)
+	: DEFAULT_TURN_DURATION_MS;
+const turnTimers = new Map();
 
 function nowMs() {
 	return Date.now();
@@ -90,7 +98,7 @@ function broadcastState(room) {
 function getOrCreateRoom(roomId) {
 	let room = rooms.get(roomId);
 	if (!room) {
-		room = createRoom(roomId);
+		room = createRoom(roomId, { turnDurationMs: TURN_TIMEOUT_MS });
 		rooms.set(roomId, room);
 	}
 	return room;
@@ -109,6 +117,45 @@ function clearDisconnectTimer(roomId, playerId) {
 	}
 }
 
+function clearTurnTimer(roomId) {
+	const timer = turnTimers.get(roomId);
+	if (timer) {
+		clearTimeout(timer);
+		turnTimers.delete(roomId);
+	}
+}
+
+function scheduleTurnTimer(room) {
+	clearTurnTimer(room.id);
+	if (room.phase !== PHASES.PLAY || !room.turnSeat || !room.turnDeadlineAt) return;
+	const delayMs = Math.max(0, room.turnDeadlineAt - nowMs());
+	const timer = setTimeout(() => {
+		turnTimers.delete(room.id);
+		const liveRoom = rooms.get(room.id);
+		if (!liveRoom) return;
+		if (liveRoom.phase !== PHASES.PLAY || !liveRoom.turnSeat || !liveRoom.turnDeadlineAt) return;
+		if (liveRoom.turnDeadlineAt > nowMs()) {
+			scheduleTurnTimer(liveRoom);
+			return;
+		}
+
+		const skippedSeat = liveRoom.turnSeat;
+		liveRoom.turnSeat = nextOccupiedSeat(liveRoom, liveRoom.turnSeat);
+		checkForWin(liveRoom);
+		resetTurnTimer(liveRoom);
+		liveRoom.updatedAt = nowMs();
+
+		broadcast(liveRoom, {
+			type: "turn_skipped",
+			seat: skippedSeat,
+			nextSeat: liveRoom.turnSeat
+		});
+		broadcastState(liveRoom);
+		scheduleTurnTimer(liveRoom);
+	}, delayMs);
+	turnTimers.set(room.id, timer);
+}
+
 function finalizeDisconnectedPlayer(room, playerId) {
 	const player = room.players.get(playerId);
 	if (!player) return;
@@ -117,6 +164,7 @@ function finalizeDisconnectedPlayer(room, playerId) {
 	room.updatedAt = nowMs();
 
 	if (room.players.size === 0) {
+		clearTurnTimer(room.id);
 		rooms.delete(room.id);
 		return;
 	}
@@ -125,6 +173,7 @@ function finalizeDisconnectedPlayer(room, playerId) {
 		eliminatePlayer(room, player.seat);
 		if (room.turnSeat === player.seat) {
 			room.turnSeat = nextOccupiedSeat(room, player.seat);
+			resetTurnTimer(room);
 		}
 		checkForWin(room);
 	} else {
@@ -136,6 +185,7 @@ function finalizeDisconnectedPlayer(room, playerId) {
 
 	broadcast(room, { type: "presence" });
 	broadcastState(room);
+	scheduleTurnTimer(room);
 }
 
 function scheduleDisconnectFinalization(room, playerId) {
@@ -165,6 +215,7 @@ wss.on("connection", (ws, req) => {
 	}
 
 	const room = getOrCreateRoom(roomId);
+	scheduleTurnTimer(room);
 	const reconnectToken = String(url.searchParams.get("session") ?? "").trim();
 	let player = null;
 	if (reconnectToken) {
@@ -267,7 +318,33 @@ wss.on("connection", (ws, req) => {
 			}
 			if (maybeAdvancePhase(room)) {
 				broadcastState(room);
+				scheduleTurnTimer(room);
 			}
+			return;
+		}
+
+		if (msg.type === "set_turn_duration") {
+			if (room.phase !== PHASES.LOBBY) {
+				safeSend(ws, { type: "turn_duration_result", ok: false, reason: "Turn timer can only be changed in the lobby." });
+				return;
+			}
+			const seconds = Number(msg.seconds);
+			if (!Number.isFinite(seconds) || !Number.isInteger(seconds)) {
+				safeSend(ws, { type: "turn_duration_result", ok: false, reason: "Turn timer must be an integer number of seconds." });
+				return;
+			}
+			if (seconds < MIN_TURN_DURATION_SEC || seconds > MAX_TURN_DURATION_SEC) {
+				safeSend(ws, {
+					type: "turn_duration_result",
+					ok: false,
+					reason: `Turn timer must be between ${MIN_TURN_DURATION_SEC} and ${MAX_TURN_DURATION_SEC} seconds.`
+				});
+				return;
+			}
+			room.turnDurationMs = seconds * 1000;
+			room.updatedAt = nowMs();
+			broadcastState(room);
+			safeSend(ws, { type: "turn_duration_result", ok: true, seconds });
 			return;
 		}
 
@@ -279,6 +356,7 @@ wss.on("connection", (ws, req) => {
 			}
 			if (maybeAdvancePhase(room)) {
 				broadcastState(room);
+				scheduleTurnTimer(room);
 			}
 			return;
 		}
@@ -295,6 +373,7 @@ wss.on("connection", (ws, req) => {
 					state: roomSnapshotFor(room, pid)
 				});
 			}
+			scheduleTurnTimer(room);
 			return;
 		}
 

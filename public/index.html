@@ -81,6 +81,13 @@
 							<button id="readyBtn" class="btn primary" disabled>Ready</button>
 							<button id="unreadyBtn" class="btn" disabled>Not ready</button>
 						</div>
+						<div class="row gap" style="margin-bottom:8px">
+							<label class="field">
+								<div class="label muted">Turn timer (seconds)</div>
+								<input id="turnDurationInput" class="input" type="number" min="1" max="60" step="1" value="30" />
+							</label>
+							<button id="saveTurnDurationBtn" class="btn">Set timer</button>
+						</div>
 						<div class="row gap">
 							<button id="randomizeBtn" class="btn" style="flex:1">Random setup</button>
 						</div>
@@ -108,7 +115,7 @@
 				<section class="boardWrap">
 					<div class="boardHeader">
 						<div class="panelTitle">Board</div>
-						<div id="turnLine" class="muted"></div>
+						<div id="turnLine" class="turnLine"></div>
 					</div>
 					<div id="board" class="board"></div>
 					<div id="hint" class="hint muted"></div>
