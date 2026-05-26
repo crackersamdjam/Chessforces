@@ -2,4 +2,4 @@
 - after reconnect, loses past moves of a current game. is there a way to preserve it? User-side?
 - after end of game, make all pieces visible and game downloadable
 - add github action for running tests on push
-- when "randomize setup" is clicked, pieces are places one by one of the board. Can we change it so that the board is only rendered once with all pieces placed at once?
+- migrate to TypeScript
