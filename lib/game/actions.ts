@@ -12,11 +12,11 @@ import {
 	resetTurnTimer
 } from "./state.js";
 
-function activeSeats(room) {
+function activeSeats(room: any) {
 	return Array.from(room.seatToPlayerId.keys()).filter((seat) => !room.eliminatedSeats.has(seat));
 }
 
-export function applyPlacement(room, playerId, pieceId, pos) {
+export function applyPlacement(room: any, playerId: string, pieceId: string, pos: any) {
 	if (room.phase !== PHASES.LOBBY) {
 		return { ok: false, reason: "Placement is only allowed in the lobby." };
 	}
@@ -50,7 +50,7 @@ export function applyPlacement(room, playerId, pieceId, pos) {
 	return { ok: true };
 }
 
-export function applyMove(room, playerId, pieceId, to) {
+export function applyMove(room: any, playerId: string, pieceId: string, to: any) {
 	if (room.phase !== PHASES.PLAY) {
 		return { ok: false, reason: "The game is not in play." };
 	}
@@ -109,7 +109,7 @@ export function applyMove(room, playerId, pieceId, to) {
 		return { ok: false, reason: "Pieces on camp (行营) cells are immune to capture." };
 	}
 
-	let capture = null;
+	let capture: any = null;
 	const eliminatedBefore = new Set(room.eliminatedSeats);
 	if (target) {
 		capture = resolveCapture(piece, target);
@@ -134,7 +134,7 @@ export function applyMove(room, playerId, pieceId, to) {
 
 	const lastMove = { by: player.seat, pieceId: piece.id, from, to, capture };
 	room.lastMove = lastMove;
-	const eliminatedThisMove = [];
+	const eliminatedThisMove: string[] = [];
 	for (const seat of room.eliminatedSeats) {
 		if (!eliminatedBefore.has(seat)) eliminatedThisMove.push(seat);
 	}
@@ -155,7 +155,7 @@ export function applyMove(room, playerId, pieceId, to) {
 	return { ok: true, capture, lastMove };
 }
 
-export function applyForfeit(room, playerId) {
+export function applyForfeit(room: any, playerId: string) {
 	if (room.phase !== PHASES.PLAY) {
 		return { ok: false, reason: "You can only forfeit during play." };
 	}
@@ -179,7 +179,7 @@ export function applyForfeit(room, playerId) {
 	return { ok: true, seat: player.seat };
 }
 
-export function applyOfferDraw(room, playerId) {
+export function applyOfferDraw(room: any, playerId: string) {
 	if (room.phase !== PHASES.PLAY) {
 		return { ok: false, reason: "You can only offer a draw during play." };
 	}

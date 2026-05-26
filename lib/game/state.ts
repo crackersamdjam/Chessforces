@@ -8,7 +8,7 @@ export const MIN_TURN_DURATION_MS = MIN_TURN_DURATION_SEC * 1000;
 export const MAX_TURN_DURATION_MS = MAX_TURN_DURATION_SEC * 1000;
 export const DEFAULT_TURN_DURATION_MS = 30_000;
 
-function snapTurnDurationMs(ms) {
+function snapTurnDurationMs(ms: number) {
 	const raw =
 		Number.isFinite(Number(ms)) && Number(ms) > 0
 			? Math.floor(Number(ms))
@@ -16,41 +16,41 @@ function snapTurnDurationMs(ms) {
 	return Math.min(MAX_TURN_DURATION_MS, Math.max(MIN_TURN_DURATION_MS, raw));
 }
 
-export function createRoom(id, overrides = {}) {
+export function createRoom(id: string, overrides: Record<string, any> = {}) {
 	return {
 		id,
 		createdAt: Date.now(),
 		updatedAt: Date.now(),
 		phase: PHASES.LOBBY,
-		players: new Map(),
-		seatToPlayerId: new Map(),
+		players: new Map<string, any>(),
+		seatToPlayerId: new Map<string, string>(),
 		board: createBoard(),
-		pieces: new Map(),
-		turnSeat: null,
-		turnStartedAt: null,
-		turnDeadlineAt: null,
+		pieces: new Map<string, any>(),
+		turnSeat: null as string | null,
+		turnStartedAt: null as number | null,
+		turnDeadlineAt: null as number | null,
 		turnDurationMs: DEFAULT_TURN_DURATION_MS,
 		lastMove: null,
 		moveHistory: [],
 		initialSetupByPieceId: null,
 		gameMode: "ffa",
 		winnerTeam: null,
-		eliminatedSeats: new Set(),
+		eliminatedSeats: new Set<string>(),
 		gameOverReason: null,
-		drawOfferSeats: new Set(),
+		drawOfferSeats: new Set<string>(),
 		...overrides
 	};
 }
 
-export function pieceAt(room, pos) {
+export function pieceAt(room: any, pos: any) {
 	for (const p of room.pieces.values()) {
 		if (p.alive !== false && p.pos && p.pos.r === pos.r && p.pos.c === pos.c) return p;
 	}
 	return null;
 }
 
-export function ensurePieceSet(room, playerId, idFn = nanoid) {
-	const existing = Array.from(room.pieces.values()).some((p) => p.ownerId === playerId);
+export function ensurePieceSet(room: any, playerId: string, idFn = nanoid) {
+	const existing = (Array.from(room.pieces.values()) as any[]).some((p) => p.ownerId === playerId);
 	if (existing) return;
 
 	for (const def of PIECE_DEFS) {
@@ -71,10 +71,10 @@ export function ensurePieceSet(room, playerId, idFn = nanoid) {
 	}
 }
 
-export function roomSnapshotFor(room, viewerId) {
+export function roomSnapshotFor(room: any, viewerId: string) {
 	const turnDurationMs = snapTurnDurationMs(room.turnDurationMs);
 
-	const players = [];
+	const players: any[] = [];
 	for (const [pid, p] of room.players) {
 		players.push({
 			id: pid,
@@ -85,7 +85,7 @@ export function roomSnapshotFor(room, viewerId) {
 		});
 	}
 
-	const pieces = [];
+	const pieces: any[] = [];
 	for (const piece of room.pieces.values()) {
 		const isOwner = piece.ownerId === viewerId;
 		const isRevealed = !!piece.flagRevealed;
@@ -119,20 +119,20 @@ export function roomSnapshotFor(room, viewerId) {
 	};
 }
 
-export function allPiecesPlaced(room, playerId) {
-	const mine = Array.from(room.pieces.values()).filter((pc) => pc.ownerId === playerId);
+export function allPiecesPlaced(room: any, playerId: string) {
+	const mine = (Array.from(room.pieces.values()) as any[]).filter((pc) => pc.ownerId === playerId);
 	return mine.length > 0 && mine.every((pc) => pc.pos !== null);
 }
 
-export function resolveGameMode(seatedCount) {
+export function resolveGameMode(seatedCount: number) {
 	return seatedCount === 4 ? "2v2" : "ffa";
 }
 
 /** Returns true if the room transitioned from lobby to play. */
-export function maybeAdvancePhase(room) {
+export function maybeAdvancePhase(room: any) {
 	if (room.phase !== PHASES.LOBBY) return false;
 
-	const seatedPlayers = Array.from(room.players.values()).filter((p) => p.seat);
+	const seatedPlayers = (Array.from(room.players.values()) as any[]).filter((p) => p.seat);
 	if (seatedPlayers.length < 2) return false;
 
 	const allReady = seatedPlayers.every((p) => p.ready);
@@ -147,13 +147,13 @@ export function maybeAdvancePhase(room) {
 	room.lastMove = null;
 	room.updatedAt = Date.now();
 	room.winnerTeam = null;
-	room.eliminatedSeats = new Set();
+	room.eliminatedSeats = new Set<string>();
 	room.gameOverReason = null;
-	room.drawOfferSeats = new Set();
+	room.drawOfferSeats = new Set<string>();
 	return true;
 }
 
-export function startGame(room) {
+export function startGame(room: any) {
 	room.phase = PHASES.PLAY;
 	room.turnSeat = SEATS.find((s) => room.seatToPlayerId.has(s)) ?? null;
 	resetTurnTimer(room);
@@ -162,12 +162,12 @@ export function startGame(room) {
 	room.lastMove = null;
 	room.updatedAt = Date.now();
 	room.winnerTeam = null;
-	room.eliminatedSeats = new Set();
+	room.eliminatedSeats = new Set<string>();
 	room.gameOverReason = null;
-	room.drawOfferSeats = new Set();
+	room.drawOfferSeats = new Set<string>();
 }
 
-export function nextOccupiedSeat(room, fromSeat) {
+export function nextOccupiedSeat(room: any, fromSeat: (typeof SEATS)[number]) {
 	const startIdx = SEATS.indexOf(fromSeat);
 	for (let i = 1; i <= SEATS.length; i++) {
 		const seat = SEATS[(startIdx + i) % SEATS.length];
@@ -176,13 +176,13 @@ export function nextOccupiedSeat(room, fromSeat) {
 	return fromSeat;
 }
 
-export function teamOf(room, seat) {
+export function teamOf(room: any, seat: string | null) {
 	if (!seat) return null;
 	if (room.gameMode === "2v2") return { N: "NS", S: "NS", E: "EW", W: "EW" }[seat] ?? seat;
 	return seat;
 }
 
-export function eliminatePlayer(room, seat) {
+export function eliminatePlayer(room: any, seat: string) {
 	if (room.eliminatedSeats.has(seat)) return;
 	room.eliminatedSeats.add(seat);
 	const playerId = room.seatToPlayerId.get(seat);
@@ -195,14 +195,14 @@ export function eliminatePlayer(room, seat) {
 	}
 }
 
-export function isFriendly(room, seatA, seatB) {
+export function isFriendly(room: any, seatA: string | null, seatB: string | null) {
 	return seatA != null && seatB != null && teamOf(room, seatA) === teamOf(room, seatB);
 }
 
-export function checkForWin(room) {
+export function checkForWin(room: any) {
 	if (room.phase === PHASES.DONE) return;
 
-	const activeTeams = new Set();
+	const activeTeams = new Set<string | null>();
 	for (const [seat] of room.seatToPlayerId) {
 		if (!room.eliminatedSeats.has(seat)) activeTeams.add(teamOf(room, seat));
 	}
@@ -216,7 +216,7 @@ export function checkForWin(room) {
 	}
 }
 
-export function resetTurnTimer(room, now = Date.now()) {
+export function resetTurnTimer(room: any, now = Date.now()) {
 	const turnDurationMs = snapTurnDurationMs(room.turnDurationMs);
 	room.turnDurationMs = turnDurationMs;
 	if (room.phase !== PHASES.PLAY || !room.turnSeat) {
@@ -228,8 +228,8 @@ export function resetTurnTimer(room, now = Date.now()) {
 	room.turnDeadlineAt = now + turnDurationMs;
 }
 
-function snapshotInitialSetupByPieceId(room) {
-	const setup = {};
+function snapshotInitialSetupByPieceId(room: any) {
+	const setup: Record<string, any> = {};
 	for (const piece of room.pieces.values()) {
 		setup[piece.id] = piece.pos ? { r: piece.pos.r, c: piece.pos.c } : null;
 	}

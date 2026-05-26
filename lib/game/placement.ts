@@ -1,6 +1,6 @@
 import { boardCellAt } from "./board.js";
 
-export function homeInfoForSeat(board, seat) {
+export function homeInfoForSeat(board: any, seat: string) {
 	switch (seat) {
 		case "N":
 			return {
@@ -39,8 +39,8 @@ export function homeInfoForSeat(board, seat) {
 	}
 }
 
-export function isHQCell(board, seat, pos) {
-	const info = homeInfoForSeat(board, seat);
+export function isHQCell(board: any, seat: string, pos: any) {
+	const info: any = homeInfoForSeat(board, seat);
 	if (!info) return false;
 	const cell = boardCellAt(board, pos);
 	if (!cell || cell.type !== "hq") return false;
@@ -50,11 +50,11 @@ export function isHQCell(board, seat, pos) {
 	return pos.c === info.hqCol && info.hqRows.includes(pos.r);
 }
 
-export function validatePlacement(room, piece, player) {
+export function validatePlacement(room: any, piece: any, player: any) {
 	if (!player.seat) return false;
 	const pos = piece.pos;
 	if (!pos) return true;
-	const info = homeInfoForSeat(room.board, player.seat);
+	const info: any = homeInfoForSeat(room.board, player.seat);
 	if (!info) return false;
 
 	if (pos.r < info.minR || pos.r > info.maxR || pos.c < info.minC || pos.c > info.maxC) return false;

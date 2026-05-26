@@ -37,3 +37,12 @@ export {
 	parseGameDocument,
 	applySetupToRoom
 } from "./serialize.js";
+export type {
+	Seat,
+	Phase,
+	Position,
+	SetupLocalPosition,
+	ClientToServerMessage,
+	ServerToClientMessage
+} from "./types.js";
+export { isClientToServerMessage } from "./types.js";

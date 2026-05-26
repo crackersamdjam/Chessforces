@@ -16,21 +16,24 @@ import { homeInfoForSeat } from "../../lib/game/placement.js";
 
 let nextId = 0;
 
-function testIdFn() {
+function testIdFn<Type extends string = string>(_size?: number): Type {
 	nextId += 1;
-	return `piece-${nextId}`;
+	return `piece-${nextId}` as Type;
 }
 
 export function resetIdCounter() {
 	nextId = 0;
 }
 
-export function createTestRoom(overrides = {}) {
+export function createTestRoom(overrides: Record<string, any> = {}) {
 	resetIdCounter();
 	return createRoom("test-room", overrides);
 }
 
-export function addPlayer(room, { playerId = `player-${room.players.size + 1}`, seat, name = "Test", ready = false } = {}) {
+export function addPlayer(
+	room: any,
+	{ playerId = `player-${room.players.size + 1}`, seat = null, name = "Test", ready = false }: { playerId?: string; seat?: string | null; name?: string; ready?: boolean } = {}
+) {
 	const player = {
 		id: playerId,
 		name,
@@ -46,7 +49,7 @@ export function addPlayer(room, { playerId = `player-${room.players.size + 1}`, 
 	return { playerId, seat, player };
 }
 
-export function findPiece(room, playerId, type) {
+export function findPiece(room: any, playerId: string, type: string) {
 	for (const piece of room.pieces.values()) {
 		if (piece.ownerId === playerId && piece.type === type && piece.alive !== false) {
 			return piece;
@@ -55,15 +58,15 @@ export function findPiece(room, playerId, type) {
 	return null;
 }
 
-export function setPieceAt(room, playerId, type, pos) {
+export function setPieceAt(room: any, playerId: string, type: string, pos: { r: number; c: number }) {
 	const piece = findPiece(room, playerId, type);
 	if (!piece) throw new Error(`No ${type} found for player ${playerId}`);
 	piece.pos = pos;
 	return piece;
 }
 
-export function setupMinimalGame(room, seats = ["N", "E"]) {
-	const players = {};
+export function setupMinimalGame(room: any, seats = ["N", "E"]) {
+	const players: Record<string, string> = {};
 	for (const seat of seats) {
 		const { playerId } = addPlayer(room, { seat });
 		players[seat] = playerId;
@@ -80,12 +83,12 @@ export function setupMinimalGame(room, seats = ["N", "E"]) {
 	return players;
 }
 
-export function assertPos(piece, r, c) {
+export function assertPos(piece: any, r: number, c: number) {
 	assert.equal(piece.pos?.r, r, `expected row ${r}, got ${piece.pos?.r}`);
 	assert.equal(piece.pos?.c, c, `expected col ${c}, got ${piece.pos?.c}`);
 }
 
-export function makePiece(id, type, rank = null, overrides = {}) {
+export function makePiece(id: string, type: string, rank: number | null = null, overrides: Record<string, any> = {}) {
 	return {
 		id,
 		ownerId: "owner",
@@ -99,14 +102,14 @@ export function makePiece(id, type, rank = null, overrides = {}) {
 	};
 }
 
-function sortCells(cells) {
+function sortCells(cells: Array<{ r: number; c: number }>) {
 	return [...cells].sort((a, b) => a.r - b.r || a.c - b.c);
 }
 
 /** Legal placement (mirrors client randomize cell rules). */
-export function placePlayerPieces(room, playerId, seat) {
-	const pick = (arr) => arr[randomInt(arr.length)];
-	const info = homeInfoForSeat(room.board, seat);
+export function placePlayerPieces(room: any, playerId: string, seat: string) {
+	const pick = (arr: any[]) => arr[randomInt(arr.length)];
+	const info: any = homeInfoForSeat(room.board, seat);
 	if (!info) throw new Error(`No home zone for seat ${seat}`);
 
 	const allHomeCells = room.board.cells.filter(
@@ -120,10 +123,10 @@ export function placePlayerPieces(room, playerId, seat) {
 	const postCells = allHomeCells.filter((cell) => cell.type === "post");
 	const hqCells = allHomeCells.filter((cell) => cell.type === "hq");
 
-	let flagCells;
-	let mineCells;
-	let bombCells;
-	let normalCells;
+	let flagCells: Array<{ r: number; c: number }>;
+	let mineCells: Array<{ r: number; c: number }>;
+	let bombCells: Array<{ r: number; c: number }>;
+	let normalCells: Array<{ r: number; c: number }>;
 	if (info.orientation === "row") {
 		flagCells = hqCells.filter((cell) => cell.r === info.hqRow && info.hqCols.includes(cell.c));
 		mineCells = postCells.filter((cell) => info.mineRows.includes(cell.r));
@@ -141,7 +144,7 @@ export function placePlayerPieces(room, playerId, seat) {
 	bombCells = sortCells(bombCells);
 	normalCells = sortCells(normalCells);
 
-	const pieces = Array.from(room.pieces.values()).filter((p) => p.ownerId === playerId);
+	const pieces = (Array.from(room.pieces.values()) as any[]).filter((p) => p.ownerId === playerId);
 	const ordered = [
 		...pieces.filter((p) => p.type === "flag"),
 		...pieces.filter((p) => p.type === "mine"),
@@ -150,7 +153,7 @@ export function placePlayerPieces(room, playerId, seat) {
 	];
 
 	for (const piece of ordered) {
-		let candidates;
+		let candidates: Array<{ r: number; c: number }>;
 		if (piece.type === "flag") candidates = flagCells;
 		else if (piece.type === "mine") candidates = mineCells;
 		else if (piece.type === "bomb") candidates = bombCells;
@@ -165,8 +168,8 @@ export function placePlayerPieces(room, playerId, seat) {
 }
 
 /** Four seated players, full placement, lobby → play (2v2). */
-export function setup2v2ForPlaythrough(room) {
-	const players = {};
+export function setup2v2ForPlaythrough(room: any) {
+	const players: Record<string, string> = {};
 	for (const seat of ["N", "E", "S", "W"]) {
 		const { playerId, player } = addPlayer(room, { seat });
 		players[seat] = playerId;
@@ -179,7 +182,7 @@ export function setup2v2ForPlaythrough(room) {
 	return players;
 }
 
-function pieceAt(room, pos) {
+function pieceAt(room: any, pos: { r: number; c: number }) {
 	for (const p of room.pieces.values()) {
 		if (p.alive !== false && p.pos && p.pos.r === pos.r && p.pos.c === pos.c) return p;
 	}
@@ -187,21 +190,21 @@ function pieceAt(room, pos) {
 }
 
 /** Try biased legal moves first, then any legal move; returns applyMove result. */
-export function playBotMove(room, seat) {
+export function playBotMove(room: any, seat: string) {
 	const playerId = room.seatToPlayerId.get(seat);
 	const candidates = [
 		...findLegalPlayMoves(room, seat, { biasToEnemyHq: true }),
 		...findLegalPlayMoves(room, seat, { limit: 32 })
 	];
-	const seen = new Set();
-	let lastReason = null;
+	const seen = new Set<string>();
+	let lastReason: string | null = null;
 	for (const { pieceId, to } of candidates) {
 		const key = `${pieceId}:${to.r},${to.c}`;
 		if (seen.has(key)) continue;
 		seen.add(key);
 		const result = applyMove(room, playerId, pieceId, to);
 		if (result.ok) return result;
-		lastReason = result.reason;
+		lastReason = result.reason ?? null;
 	}
 	throw new Error(`No legal move for seat ${seat}${lastReason ? `: ${lastReason}` : ""}`);
 }

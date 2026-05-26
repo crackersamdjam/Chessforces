@@ -11,7 +11,7 @@ export const BOARD_SPEC_VERSION = 1;
 const PIECE_COUNTS = new Map(PIECE_DEFS.map((def) => [def.type, def.count]));
 const GAME_MODES = new Set(["ffa", "2v2"]);
 
-export function exportSetup(room, playerId) {
+export function exportSetup(room: any, playerId: string) {
 	const player = room.players.get(playerId);
 	if (!player?.seat) {
 		throw new Error("You must take a seat before exporting a setup.");
@@ -23,8 +23,8 @@ export function exportSetup(room, playerId) {
 	};
 }
 
-export function exportGame(room) {
-	const initialSetup = {};
+export function exportGame(room: any) {
+	const initialSetup: Record<string, any> = {};
 	for (const seat of SEATS) {
 		initialSetup[seat] = exportSeatPieces(room, seat, room.initialSetupByPieceId ?? null);
 	}
@@ -48,7 +48,7 @@ export function exportGame(room) {
 	};
 }
 
-export function parseSetupDocument(input) {
+export function parseSetupDocument(input: unknown) {
 	assertObject(input, "Setup file must be a JSON object.");
 	assertEqual(input.format, SETUP_FILE_FORMAT, "Unsupported setup format.");
 	assertEqual(input.version, SETUP_FILE_VERSION, "Unsupported setup version.");
@@ -60,7 +60,7 @@ export function parseSetupDocument(input) {
 	};
 }
 
-export function parseGameDocument(input) {
+export function parseGameDocument(input: unknown) {
 	assertObject(input, "Game file must be a JSON object.");
 	assertEqual(input.format, GAME_FILE_FORMAT, "Unsupported game format.");
 	assertEqual(input.version, GAME_FILE_VERSION, "Unsupported game version.");
@@ -81,7 +81,7 @@ export function parseGameDocument(input) {
 	};
 }
 
-export function applySetupToRoom(room, playerId, setupDoc) {
+export function applySetupToRoom(room: any, playerId: string, setupDoc: unknown) {
 	const player = room.players.get(playerId);
 	if (!player?.seat) {
 		return { ok: false, reason: "You must take a seat before importing a setup." };
@@ -90,7 +90,7 @@ export function applySetupToRoom(room, playerId, setupDoc) {
 		return { ok: false, reason: "Setup import is only allowed in the lobby." };
 	}
 
-	const playerPieces = Array.from(room.pieces.values()).filter((piece) => piece.ownerId === playerId);
+	const playerPieces = (Array.from(room.pieces.values()) as any[]).filter((piece) => piece.ownerId === playerId);
 	const prevPositions = new Map();
 	for (const piece of playerPieces) {
 		prevPositions.set(piece.id, piece.pos ? { r: piece.pos.r, c: piece.pos.c } : null);
@@ -98,7 +98,7 @@ export function applySetupToRoom(room, playerId, setupDoc) {
 
 	try {
 		const setup = parseSetupDocument(setupDoc);
-		const keyToPiece = new Map();
+		const keyToPiece = new Map<string, any>();
 		for (const piece of playerPieces) {
 			keyToPiece.set(pieceSlotKey(piece), piece);
 			piece.pos = null;
@@ -130,8 +130,11 @@ export function applySetupToRoom(room, playerId, setupDoc) {
 	}
 }
 
-function exportPersonalSetup(room, playerId, seat) {
+function exportPersonalSetup(room: any, playerId: string, seat: string) {
 	return Array.from(room.pieces.values())
+		// Map defaults in this codebase are intentionally loose during migration.
+		// Cast here to keep typecheck light without altering runtime behavior.
+		.map((piece) => piece as any)
 		.filter((piece) => piece.ownerId === playerId)
 		.sort((a, b) => {
 			if (a.type !== b.type) return a.type.localeCompare(b.type);
@@ -147,7 +150,7 @@ function exportPersonalSetup(room, playerId, seat) {
 		}));
 }
 
-function exportSeatPieces(room, seat, setupByPieceId = null) {
+function exportSeatPieces(room: any, seat: string, setupByPieceId: Record<string, any> | null = null) {
 	return piecesForSeat(room, seat).map((piece) => ({
 		type: piece.type,
 		slot: piece.slot ?? 0,
@@ -155,10 +158,10 @@ function exportSeatPieces(room, seat, setupByPieceId = null) {
 	}));
 }
 
-function piecesForSeat(room, seat) {
+function piecesForSeat(room: any, seat: string) {
 	const playerId = room.seatToPlayerId.get(seat);
 	if (!playerId) return [];
-	return Array.from(room.pieces.values())
+	return (Array.from(room.pieces.values()) as any[])
 		.filter((piece) => piece.ownerId === playerId)
 		.sort((a, b) => {
 			if (a.type !== b.type) return a.type.localeCompare(b.type);
@@ -169,10 +172,10 @@ function piecesForSeat(room, seat) {
 		});
 }
 
-function serializeMove(room, move, ply) {
+function serializeMove(room: any, move: any, ply: number) {
 	const piece = room.pieces.get(move.pieceId);
 	const bySeat = move.by ?? seatForOwnerId(room, piece?.ownerId) ?? null;
-	const docMove = {
+	const docMove: any = {
 		ply,
 		bySeat,
 		piece: toPieceRef(room, piece, bySeat),
@@ -193,7 +196,7 @@ function serializeMove(room, move, ply) {
 	return docMove;
 }
 
-function toPieceRef(room, piece, fallbackSeat) {
+function toPieceRef(room: any, piece: any, fallbackSeat: string | null) {
 	if (!piece) {
 		return {
 			seat: fallbackSeat ?? null,
@@ -208,20 +211,20 @@ function toPieceRef(room, piece, fallbackSeat) {
 	};
 }
 
-function seatForOwnerId(room, ownerId) {
+function seatForOwnerId(room: any, ownerId: string | null | undefined) {
 	return room.players.get(ownerId)?.seat ?? null;
 }
 
-function validateSeatSetupMap(value, requirePos) {
+function validateSeatSetupMap(value: unknown, requirePos: boolean) {
 	assertObject(value, "Expected setup seats object.");
-	const out = {};
+	const out: Record<string, any> = {};
 	for (const seat of SEATS) {
 		const entries = value[seat];
 		if (!Array.isArray(entries)) {
 			throw new Error(`Expected an array of pieces for seat ${seat}.`);
 		}
-		const typeCounts = new Map();
-		const slotSeen = new Set();
+		const typeCounts = new Map<string, number>();
+		const slotSeen = new Set<string>();
 		out[seat] = entries.map((entry) => {
 			assertObject(entry, `Invalid piece entry for seat ${seat}.`);
 			const type = String(entry.type ?? "");
@@ -229,7 +232,7 @@ function validateSeatSetupMap(value, requirePos) {
 				throw new Error(`Unknown piece type '${type}' for seat ${seat}.`);
 			}
 			const slot = Number(entry.slot);
-			if (!Number.isInteger(slot) || slot < 0 || slot >= PIECE_COUNTS.get(type)) {
+			if (!Number.isInteger(slot) || slot < 0 || slot >= (PIECE_COUNTS.get(type) ?? 0)) {
 				throw new Error(`Invalid slot ${entry.slot} for ${type} (${seat}).`);
 			}
 			const key = `${type}:${slot}`;
@@ -253,12 +256,12 @@ function validateSeatSetupMap(value, requirePos) {
 	return out;
 }
 
-function validatePersonalSetupPieces(value) {
+function validatePersonalSetupPieces(value: unknown) {
 	if (!Array.isArray(value)) {
 		throw new Error("Expected setup pieces array.");
 	}
-	const typeCounts = new Map();
-	const slotSeen = new Set();
+	const typeCounts = new Map<string, number>();
+	const slotSeen = new Set<string>();
 	const out = value.map((entry) => {
 		assertObject(entry, "Invalid setup piece entry.");
 		const type = String(entry.type ?? "");
@@ -266,7 +269,7 @@ function validatePersonalSetupPieces(value) {
 			throw new Error(`Unknown piece type '${type}'.`);
 		}
 		const slot = Number(entry.slot);
-		if (!Number.isInteger(slot) || slot < 0 || slot >= PIECE_COUNTS.get(type)) {
+		if (!Number.isInteger(slot) || slot < 0 || slot >= (PIECE_COUNTS.get(type) ?? 0)) {
 			throw new Error(`Invalid slot ${entry.slot} for ${type}.`);
 		}
 		const key = `${type}:${slot}`;
@@ -286,7 +289,7 @@ function validatePersonalSetupPieces(value) {
 	return out;
 }
 
-function validateMoves(value) {
+function validateMoves(value: unknown) {
 	if (!Array.isArray(value)) throw new Error("Game moves must be an array.");
 	return value.map((entry, idx) => {
 		assertObject(entry, `Invalid move at index ${idx}.`);
@@ -295,12 +298,12 @@ function validateMoves(value) {
 			throw new Error(`Invalid ply at index ${idx}.`);
 		}
 		const bySeat = String(entry.bySeat ?? "");
-		if (!SEATS.includes(bySeat)) throw new Error(`Invalid bySeat '${bySeat}' at ply ${ply}.`);
+		if (!SEATS.includes(bySeat as (typeof SEATS)[number])) throw new Error(`Invalid bySeat '${bySeat}' at ply ${ply}.`);
 		const piece = validatePieceRef(entry.piece, `piece at ply ${ply}`);
 		const from = normalizePos(entry.from);
 		const to = normalizePos(entry.to);
 		if (!from || !to) throw new Error(`Move at ply ${ply} must include from/to.`);
-		const out = {
+		const out: any = {
 			ply,
 			bySeat,
 			piece,
@@ -321,20 +324,20 @@ function validateMoves(value) {
 	});
 }
 
-function validatePieceRef(value, ctx) {
+function validatePieceRef(value: unknown, ctx: string) {
 	assertObject(value, `Invalid ${ctx}.`);
 	const seat = String(value.seat ?? "");
-	if (!SEATS.includes(seat)) throw new Error(`Invalid seat in ${ctx}.`);
+	if (!SEATS.includes(seat as (typeof SEATS)[number])) throw new Error(`Invalid seat in ${ctx}.`);
 	const type = String(value.type ?? "");
 	if (!PIECE_COUNTS.has(type)) throw new Error(`Invalid type '${type}' in ${ctx}.`);
 	const slot = Number(value.slot);
-	if (!Number.isInteger(slot) || slot < 0 || slot >= PIECE_COUNTS.get(type)) {
+	if (!Number.isInteger(slot) || slot < 0 || slot >= (PIECE_COUNTS.get(type) ?? 0)) {
 		throw new Error(`Invalid slot in ${ctx}.`);
 	}
 	return { seat, type, slot };
 }
 
-function validateResult(value) {
+function validateResult(value: unknown) {
 	assertObject(value, "Game result must be an object.");
 	const phase = String(value.phase ?? "");
 	if (!["lobby", "play", "done"].includes(phase)) throw new Error("Invalid game result phase.");
@@ -345,30 +348,30 @@ function validateResult(value) {
 	};
 }
 
-function validateEliminatedSeats(value, ply) {
+function validateEliminatedSeats(value: unknown, ply: number) {
 	if (value === undefined) return [];
 	if (!Array.isArray(value)) throw new Error(`Invalid eliminatedSeats at ply ${ply}.`);
-	const seen = new Set();
+	const seen = new Set<string>();
 	for (const seat of value) {
-		if (!SEATS.includes(seat)) throw new Error(`Invalid eliminated seat '${seat}' at ply ${ply}.`);
+		if (!SEATS.includes(seat as (typeof SEATS)[number])) throw new Error(`Invalid eliminated seat '${seat}' at ply ${ply}.`);
 		if (seen.has(seat)) throw new Error(`Duplicate eliminated seat '${seat}' at ply ${ply}.`);
 		seen.add(seat);
 	}
 	return [...value];
 }
 
-function pieceSlotKey(piece) {
+function pieceSlotKey(piece: any) {
 	return `${piece.type}:${piece.slot}`;
 }
 
-function pieceAtPos(room, pos) {
+function pieceAtPos(room: any, pos: { r: number; c: number }) {
 	for (const piece of room.pieces.values()) {
 		if (piece.alive !== false && piece.pos && piece.pos.r === pos.r && piece.pos.c === pos.c) return piece;
 	}
 	return null;
 }
 
-function normalizePos(pos) {
+function normalizePos(pos: unknown) {
 	if (pos == null) return null;
 	assertObject(pos, "Invalid position.");
 	const r = Number(pos.r);
@@ -379,7 +382,7 @@ function normalizePos(pos) {
 	return { r, c };
 }
 
-function normalizeLocalPos(pos) {
+function normalizeLocalPos(pos: unknown) {
 	assertObject(pos, "Invalid local setup position.");
 	const depth = Number(pos.depth);
 	const lane = Number(pos.lane);
@@ -392,7 +395,7 @@ function normalizeLocalPos(pos) {
 	return { depth, lane };
 }
 
-function boardPosToLocalPos(seat, pos) {
+function boardPosToLocalPos(seat: string, pos: { r: number; c: number } | null) {
 	if (pos == null) return null;
 	switch (seat) {
 		case "N":
@@ -408,7 +411,7 @@ function boardPosToLocalPos(seat, pos) {
 	}
 }
 
-function localPosToBoardPos(seat, localPos) {
+function localPosToBoardPos(seat: string, localPos: { depth: number; lane: number }) {
 	switch (seat) {
 		case "N":
 			return { r: localPos.depth, c: 6 + localPos.lane };
@@ -423,21 +426,22 @@ function localPosToBoardPos(seat, localPos) {
 	}
 }
 
-function assertGameMode(mode) {
-	if (!GAME_MODES.has(mode)) throw new Error(`Unsupported game mode '${mode}'.`);
+function assertGameMode(mode: unknown) {
+	const gameMode = String(mode ?? "");
+	if (!GAME_MODES.has(gameMode)) throw new Error(`Unsupported game mode '${gameMode}'.`);
 }
 
-function assertEqual(actual, expected, message) {
+function assertEqual(actual: unknown, expected: unknown, message: string) {
 	if (actual !== expected) throw new Error(message);
 }
 
-function assertObject(value, message) {
+function assertObject(value, message): asserts value is Record<string, any> {
 	if (!value || typeof value !== "object" || Array.isArray(value)) {
 		throw new Error(message);
 	}
 }
 
-function assertMaybeObject(value, message) {
+function assertMaybeObject(value: unknown, message: string) {
 	if (value == null) return null;
 	assertObject(value, message);
 	return value;

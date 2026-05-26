@@ -2,4 +2,6 @@
 - after reconnect, loses past moves of a current game. is there a way to preserve it? User-side?
 - after end of game, make all pieces visible and game downloadable
 - add github action for running tests on push
-- migrate to TypeScript
+- add sound effects
+- make a nicer favicon
+- keep your turn red, but when the timer's on another player's turn, don't add red highlight

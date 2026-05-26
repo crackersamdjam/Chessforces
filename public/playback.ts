@@ -1,3 +1,4 @@
+// @ts-nocheck
 const PIECE_LABELS = {
 	marshal: "司令(40)",
 	general: "军长(39)",
@@ -20,11 +21,11 @@ export function initPlaybackPage() {
 	let replay = null;
 	let moveIndex = 0;
 
-	const fileInput = document.getElementById("playbackFileInput");
-	const seatFilter = document.getElementById("replaySeatFilter");
-	const statusLine = document.getElementById("replayStatusLine");
-	const moveLabel = document.getElementById("replayMoveLabel");
-	const hint = document.getElementById("replayHint");
+	const fileInput = document.getElementById("playbackFileInput") as HTMLInputElement;
+	const seatFilter = document.getElementById("replaySeatFilter") as HTMLSelectElement;
+	const statusLine = document.getElementById("replayStatusLine") as HTMLElement;
+	const moveLabel = document.getElementById("replayMoveLabel") as HTMLElement;
+	const hint = document.getElementById("replayHint") as HTMLElement;
 
 	const setHint = (text) => {
 		hint.textContent = text || "";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { initPlaybackPage } from "./playback.js";
 
 const $ = (id) => document.getElementById(id);

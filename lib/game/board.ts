@@ -1,12 +1,16 @@
+type CellType = "post" | "camp" | "hq" | "inactive" | "railonly" | "mountain";
+type BoardCell = { r: number; c: number; type: CellType };
+type BoardPos = { r: number; c: number };
+type RailEdge = [BoardPos, BoardPos];
+type Board = { rows: number; cols: number; cells: BoardCell[]; railEdges: RailEdge[] };
+
 /**
  * Create a 4-player cross-shaped board.
  */
 export function createBoard() {
 	const rows = 17;
 	const cols = 17;
-	/** @type {{rows:number, cols:number, cells:{r:number,c:number,type:"post"|"camp"|"hq"|"inactive"|"railonly"|"mountain"}[], railEdges:[{r:number,c:number},{r:number,c:number}][]}} */
-	// @ts-ignore
-	const board = { rows, cols, cells: [] };
+	const board: Board = { rows, cols, cells: [], railEdges: [] };
 
 	for (let r = 0; r < rows; r++) {
 		for (let c = 0; c < cols; c++) {
@@ -49,7 +53,7 @@ export function createBoard() {
 		mark(r, c, "mountain");
 	}
 
-	const railEdges = [];
+	const railEdges: RailEdge[] = [];
 	function re(r1, c1, r2, c2) { railEdges.push([{ r: r1, c: c1 }, { r: r2, c: c2 }]); }
 
 	for (let c = 6; c < 10; c++) re(1, c, 1, c + 1);

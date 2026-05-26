@@ -26,7 +26,7 @@ describe("game mode", () => {
 
 	it("maybeAdvancePhase sets 2v2 when four players start", () => {
 		const room = createTestRoom();
-		for (const seat of ["N", "E", "S", "W"]) {
+		for (const seat of ["N", "E", "S", "W"] as const) {
 			addPlayer(room, { seat, ready: true });
 		}
 		assert.equal(maybeAdvancePhase(room), true);
@@ -36,7 +36,7 @@ describe("game mode", () => {
 
 	it("maybeAdvancePhase sets ffa when three players start", () => {
 		const room = createTestRoom();
-		for (const seat of ["N", "E", "S"]) {
+		for (const seat of ["N", "E", "S"] as const) {
 			addPlayer(room, { seat, ready: true });
 		}
 		assert.equal(maybeAdvancePhase(room), true);
@@ -71,12 +71,12 @@ describe("actions", () => {
 	it("rejects move when not your turn", () => {
 		const room = createTestRoom();
 		setupMinimalGame(room, ["N", "E"]);
-		const nId = room.seatToPlayerId.get("N");
+		const nId = room.seatToPlayerId.get("N") as string;
 		const captain = setPieceAt(room, nId, "captain", { r: 5, c: 8 });
 		room.turnSeat = "E";
 		const result = applyMove(room, nId, captain.id, { r: 5, c: 9 });
 		assert.equal(result.ok, false);
-		assert.match(result.reason, /not your turn/i);
+		assert.match(String(result.reason ?? ""), /not your turn/i);
 	});
 
 	it("rejects moving out of HQ", () => {
@@ -86,7 +86,7 @@ describe("actions", () => {
 		room.turnSeat = "N";
 		const result = applyMove(room, players.N, captain.id, { r: 1, c: 7 });
 		assert.equal(result.ok, false);
-		assert.match(result.reason, /HQ|大本营/i);
+		assert.match(String(result.reason ?? ""), /HQ|大本营/i);
 		assertPos(captain, 0, 7);
 	});
 
@@ -113,7 +113,7 @@ describe("actions", () => {
 		const captain = findPiece(room, players.N, "captain");
 		const result = applyMove(room, players.N, captain.id, { r: 3, c: 8 });
 		assert.equal(result.ok, false);
-		assert.match(result.reason, /camp/i);
+		assert.match(String(result.reason ?? ""), /camp/i);
 	});
 
 	it("flag capture eliminates victim", () => {
@@ -150,7 +150,7 @@ describe("actions", () => {
 		const captain = findPiece(room, players.N, "captain");
 		const result = applyMove(room, players.N, captain.id, { r: 5, c: 9 });
 		assert.equal(result.ok, false);
-		assert.match(result.reason, /friendly/i);
+		assert.match(String(result.reason ?? ""), /friendly/i);
 	});
 
 	it("ends game when one team remains in 2v2", () => {

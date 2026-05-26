@@ -1,18 +1,18 @@
-import { chromium } from "playwright";
 import {
 	BASE_URL,
 	assert,
 	clickSeat,
 	createTrackedPage,
 	expectText,
+	launchSmokeBrowser,
 	setName,
 	setReady,
 	waitForMyTurn,
 	waitForPlacementComplete
-} from "./helpers.mjs";
+} from "./helpers.js";
 
 async function run() {
-	const browser = await chromium.launch();
+	const browser = await launchSmokeBrowser();
 	const errors = [];
 
 	const p1 = await createTrackedPage(browser, "P1", errors);

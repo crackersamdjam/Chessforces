@@ -3,25 +3,25 @@
  * For rules, moves, combat, and win conditions use test/unit/playthrough.test.js
  * (lib/game, no Playwright) — do not add more smoke tests for game logic.
  */
-import { chromium } from "playwright";
 import {
 	assert,
 	applyMove,
 	expectText,
 	findLegalPlayMovesOnPage,
+	launchSmokeBrowser,
 	setup2v2Lobby,
 	start2v2Play,
 	waitForTurnToEnd
-} from "./helpers.mjs";
+} from "./helpers.js";
 
 const MAX_MOVES = 5000;
 const GAME_TIMEOUT_MS = 120_000; // two minutes
 // Last OK run: 350 moves, ~72s (1m 12s). Not deterministic — lobby randomize uses Math.random().
 
-async function playAggressiveMove(page, seat) {
+async function playAggressiveMove(page: any, seat: string) {
 	const moves = await findLegalPlayMovesOnPage(page, seat, { limit: 64, biasToEnemyHq: true });
 	assert(moves.length > 0, `No play moves found for seat ${seat}`);
-	let lastErr = null;
+	let lastErr: unknown = null;
 	for (const move of moves) {
 		try {
 			await applyMove(page, move);
@@ -33,13 +33,13 @@ async function playAggressiveMove(page, seat) {
 	throw lastErr ?? new Error(`All play moves failed for seat ${seat}`);
 }
 
-async function isMyTurn(page) {
+async function isMyTurn(page: any) {
 	return page.evaluate(
 		() => /^Your Turn\b/.test((document.querySelector("#turnLine")?.textContent ?? "").trim())
 	);
 }
 
-async function isGameDone(page) {
+async function isGameDone(page: any) {
 	return page.evaluate(
 		() => (document.querySelector("#phaseLine")?.textContent ?? "").includes("done")
 	);
@@ -50,7 +50,7 @@ async function run() {
 	console.info(
 		"smoke-playthrough-game: UI only. Game logic playthroughs belong in test/unit/playthrough.test.js (npm test)."
 	);
-	const browser = await chromium.launch();
+	const browser = await launchSmokeBrowser();
 	const errors = [];
 
 	const { roomUrl, players, seats } = await setup2v2Lobby(browser, errors);

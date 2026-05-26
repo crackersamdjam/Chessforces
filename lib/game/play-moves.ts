@@ -23,8 +23,8 @@ const ENEMY_SEAT_ORDER = {
 	W: ["N", "S"]
 };
 
-function hqCellsForSeat(board, seat) {
-	const info = homeInfoForSeat(board, seat);
+function hqCellsForSeat(board: any, seat: string) {
+	const info: any = homeInfoForSeat(board, seat);
 	if (!info) return [];
 	if (info.orientation === "row") {
 		return info.hqCols.map((c) => ({ r: info.hqRow, c }));
@@ -33,9 +33,9 @@ function hqCellsForSeat(board, seat) {
 }
 
 /** Uncaptured enemy HQ cells in attack order; empty when both opponents are eliminated. */
-export function enemyHqTargetsForSeat(room, seat) {
+export function enemyHqTargetsForSeat(room: any, seat: string) {
 	if (room.gameMode !== "2v2") return [];
-	const targets = [];
+	const targets: any[] = [];
 	for (const enemySeat of ENEMY_SEAT_ORDER[seat] ?? []) {
 		if (room.eliminatedSeats?.has(enemySeat)) continue;
 		targets.push(...hqCellsForSeat(room.board, enemySeat));
@@ -43,7 +43,7 @@ export function enemyHqTargetsForSeat(room, seat) {
 	return targets;
 }
 
-function isEnemySeat(room, seat, other) {
+function isEnemySeat(room: any, seat: string, other: string | null | undefined) {
 	if (!other || other === seat) return false;
 	if (room.gameMode === "2v2") return teamOf(room, seat) !== teamOf(room, other);
 	return other !== seat;
@@ -53,19 +53,19 @@ function isEnemySeat(room, seat, other) {
  * Legal play moves for a seat (same rules applyMove enforces, without mutating).
  * With biasToEnemyHq, prefers captures then cells closer to enemy HQ (2v2 smoke bot).
  */
-export function findLegalPlayMoves(room, seat, { limit = 64, biasToEnemyHq = false } = {}) {
+export function findLegalPlayMoves(room: any, seat: string, { limit = 64, biasToEnemyHq = false } = {}) {
 	const playerId = room.seatToPlayerId.get(seat);
 	if (!playerId) return [];
 
 	const primaryHq = biasToEnemyHq ? (enemyHqTargetsForSeat(room, seat)[0] ?? null) : null;
-	const distToEnemy = (r, c) => {
+	const distToEnemy = (r: number, c: number) => {
 		if (!primaryHq) return 0;
 		const manhattan = Math.abs(primaryHq.r - r) + Math.abs(primaryHq.c - c);
 		const trapPenalty = RAILWAY_TRAP_PENALTY.has(`${r},${c}`) ? 1 : 0;
 		return manhattan + trapPenalty;
 	};
 
-	const moves = [];
+	const moves: any[] = [];
 	for (const piece of room.pieces.values()) {
 		if (piece.ownerId !== playerId || !piece.pos || piece.alive === false) continue;
 		if (piece.type === "flag" || piece.type === "mine") continue;

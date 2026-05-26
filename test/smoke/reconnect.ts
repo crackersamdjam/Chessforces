@@ -1,12 +1,12 @@
-import { chromium } from "playwright";
 import {
 	BASE_URL,
 	clickSeat,
 	createTrackedPage,
 	expectText,
+	launchSmokeBrowser,
 	setName,
 	waitForPlacementComplete
-} from "./helpers.mjs";
+} from "./helpers.js";
 
 async function expectSeatIsMine(page, seat, timeout = 15_000) {
 	await page.waitForFunction(
@@ -23,7 +23,7 @@ async function expectSeatIsMine(page, seat, timeout = 15_000) {
 }
 
 async function run() {
-	const browser = await chromium.launch();
+	const browser = await launchSmokeBrowser();
 	const errors = [];
 
 	try {

@@ -1,3 +1,5 @@
+import { accessSync, constants } from "node:fs";
+import { chromium } from "playwright";
 import { createBoard } from "../../lib/game/board.js";
 import { findLegalPlayMoves } from "../../lib/game/play-moves.js";
 
@@ -5,11 +7,58 @@ export const BASE_URL = process.env.SMOKE_BASE_URL ?? "http://localhost:5173";
 
 const PLAY_BOARD = createBoard();
 
-export function assert(cond, msg) {
+const DEFAULT_BROWSER_PATHS = [
+	"/usr/bin/chromium",
+	"/usr/bin/chromium-browser",
+	"/usr/bin/google-chrome",
+	"/usr/bin/google-chrome-stable"
+];
+
+function canAccess(path: string) {
+	try {
+		accessSync(path, constants.X_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function resolveBrowserPath() {
+	const envPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+	if (envPath && canAccess(envPath)) {
+		return envPath;
+	}
+	for (const path of DEFAULT_BROWSER_PATHS) {
+		if (canAccess(path)) {
+			return path;
+		}
+	}
+	return null;
+}
+
+export async function launchSmokeBrowser() {
+	try {
+		return await chromium.launch();
+	} catch (error: any) {
+		const message = String(error?.message ?? error ?? "");
+		if (!message.includes("Executable doesn't exist")) {
+			throw error;
+		}
+		const executablePath = resolveBrowserPath();
+		if (!executablePath) {
+			throw new Error(
+				"Playwright browser binary is missing. Run `npx playwright install` or set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH to an installed Chrome/Chromium executable."
+			);
+		}
+		return chromium.launch({ executablePath });
+	}
+}
+
+export function assert(cond: unknown, msg: string) {
 	if (!cond) throw new Error(msg);
 }
 
-export async function expectText(page, selector, re, timeout = 10_000) {
+export async function expectText(page: any, selector: string, re: RegExp, timeout = 10_000) {
 	const loc = page.locator(selector);
 	await loc.waitFor({ timeout });
 	await page.waitForFunction(
@@ -24,21 +73,21 @@ export async function expectText(page, selector, re, timeout = 10_000) {
 	);
 }
 
-export async function clickSeat(page, seat) {
+export async function clickSeat(page: any, seat: string) {
 	const btn = page.locator(`button[data-seat="${seat}"]`);
 	await btn.waitFor({ timeout: 10_000 });
 	await btn.click();
 }
 
-export async function setName(page, name) {
+export async function setName(page: any, name: string) {
 	await page.locator("#nameInput").fill(name);
 	await page.locator("#saveNameBtn").click();
 }
 
-export async function waitForReadyEnabled(page, timeout = 30_000) {
+export async function waitForReadyEnabled(page: any, timeout = 30_000) {
 	await page.waitForFunction(
 		() => {
-			const btn = document.querySelector("#readyBtn");
+			const btn = document.querySelector<HTMLButtonElement>("#readyBtn");
 			return btn !== null && !btn.disabled;
 		},
 		{ timeout }
@@ -46,11 +95,11 @@ export async function waitForReadyEnabled(page, timeout = 30_000) {
 }
 
 /** Wait for take_seat + randomize to finish; retry Random setup if needed. */
-export async function waitForPlacementComplete(page, seat, timeout = 60_000) {
+export async function waitForPlacementComplete(page: any, seat: string, timeout = 60_000) {
 	const deadline = Date.now() + timeout;
 	while (Date.now() < deadline) {
 		const ready = await page.evaluate(() => {
-			const btn = document.querySelector("#readyBtn");
+			const btn = document.querySelector<HTMLButtonElement>("#readyBtn");
 			return Boolean(btn && !btn.disabled);
 		});
 		if (ready) return;
@@ -60,21 +109,21 @@ export async function waitForPlacementComplete(page, seat, timeout = 60_000) {
 	throw new Error(`Placement did not complete for seat ${seat}`);
 }
 
-export async function setReady(page) {
+export async function setReady(page: any) {
 	await waitForReadyEnabled(page);
 	await page.locator("#readyBtn").click();
 }
 
-export async function sendChat(page, text) {
+export async function sendChat(page: any, text: string) {
 	await page.locator("#chatInput").fill(text);
 	await page.locator("#sendChatBtn").click();
 }
 
-export async function offerDraw(page) {
+export async function offerDraw(page: any) {
 	await page.locator("#offerDrawBtn").click();
 }
 
-export async function forfeitGame(page) {
+export async function forfeitGame(page: any) {
 	page.once("dialog", (dialog) => dialog.accept());
 	await page.locator("#forfeitBtn").click();
 }
@@ -86,20 +135,20 @@ export const HOME_ZONES = {
 	E: { minR: 6, maxR: 10, minC: 11, maxC: 16 }
 };
 
-export async function clickCell(page, r, c) {
+export async function clickCell(page: any, r: number, c: number) {
 	const cell = page.locator(`.cell[data-r="${r}"][data-c="${c}"]`);
 	await cell.waitFor({ timeout: 10_000 });
 	await cell.click();
 }
 
 /** Find pairs of own pieces to swap in the home zone (board is full after randomize). */
-export async function findPlacementSwaps(page, seat, limit = 12) {
-	const zone = HOME_ZONES[seat];
+export async function findPlacementSwaps(page: any, seat: string, limit = 12) {
+	const zone = HOME_ZONES[seat as keyof typeof HOME_ZONES];
 	return page.evaluate(
 		({ seat, zone, limit }) => {
 			const immobile = (label) => label.startsWith("军旗") || label.startsWith("地雷");
-			const owned = [];
-			for (const cell of document.querySelectorAll(".cell[data-r][data-c]")) {
+			const owned: Array<{ r: number; c: number }> = [];
+			for (const cell of document.querySelectorAll<HTMLElement>(".cell[data-r][data-c]")) {
 				const r = Number(cell.dataset.r);
 				const c = Number(cell.dataset.c);
 				if (r < zone.minR || r > zone.maxR || c < zone.minC || c > zone.maxC) continue;
@@ -110,7 +159,7 @@ export async function findPlacementSwaps(page, seat, limit = 12) {
 				if (immobile(label)) continue;
 				owned.push({ r, c });
 			}
-			const swaps = [];
+			const swaps: Array<{ fromR: number; fromC: number; toR: number; toC: number }> = [];
 			for (let i = 0; i < owned.length; i++) {
 				for (let j = i + 1; j < owned.length; j++) {
 					swaps.push({
@@ -129,20 +178,20 @@ export async function findPlacementSwaps(page, seat, limit = 12) {
 }
 
 /** Find orthogonal empty-cell moves for lobby placement (home zone only). */
-export async function findPlacementMoves(page, seat, limit = 12) {
-	const zone = HOME_ZONES[seat];
+export async function findPlacementMoves(page: any, seat: string, limit = 12) {
+	const zone = HOME_ZONES[seat as keyof typeof HOME_ZONES];
 	return page.evaluate(
 		({ zone, limit }) => {
 			const blocked = (label) =>
 				label.startsWith("军旗") || label.startsWith("地雷") || label.startsWith("炸弹");
-			const moves = [];
+			const moves: Array<{ fromR: number; fromC: number; toR: number; toC: number }> = [];
 			const dirs = [
 				[0, 1],
 				[0, -1],
 				[1, 0],
 				[-1, 0]
 			];
-			for (const cell of document.querySelectorAll(".cell[data-r][data-c]")) {
+			for (const cell of document.querySelectorAll<HTMLElement>(".cell[data-r][data-c]")) {
 				const r = Number(cell.dataset.r);
 				const c = Number(cell.dataset.c);
 				if (r < zone.minR || r > zone.maxR || c < zone.minC || c > zone.maxC) continue;
@@ -170,7 +219,7 @@ export async function findPlacementMoves(page, seat, limit = 12) {
 }
 
 /** Scrape piece positions and meta from the live board DOM. */
-export async function scrapePlayState(page) {
+export async function scrapePlayState(page: any) {
 	return page.evaluate(() => {
 		const SEATS = ["N", "E", "S", "W"];
 		const typeFromLabel = (label) => {
@@ -180,8 +229,8 @@ export async function scrapePlayState(page) {
 			if (label.startsWith("工兵")) return "engineer";
 			return "captain";
 		};
-		const pieces = [];
-		for (const cell of document.querySelectorAll(".cell[data-r][data-c]")) {
+		const pieces: Array<{ id: string; seat: string; type: string; r: number; c: number }> = [];
+		for (const cell of document.querySelectorAll<HTMLElement>(".cell[data-r][data-c]")) {
 			const token = cell.querySelector(".token");
 			if (!token) continue;
 			const ownerSeat = SEATS.find((s) => token.classList.contains(`token--seat-${s}`));
@@ -207,7 +256,7 @@ export async function scrapePlayState(page) {
 }
 
 /** Build a minimal room object for lib/game move generation. */
-export function buildPlayRoom(scrape) {
+export function buildPlayRoom(scrape: any) {
 	const room = {
 		gameMode: scrape.gameMode,
 		eliminatedSeats: new Set(scrape.eliminatedSeats),
@@ -238,11 +287,11 @@ export function buildPlayRoom(scrape) {
  * All legal play moves for a seat (road steps, camp diagonals, railway slides).
  * Uses lib/game rules on a DOM scrape of the current board.
  */
-export async function findLegalPlayMovesOnPage(page, seat, { limit = 64, biasToEnemyHq = false } = {}) {
+export async function findLegalPlayMovesOnPage(page: any, seat: string, { limit = 64, biasToEnemyHq = false } = {}) {
 	const scrape = await scrapePlayState(page);
 	const room = buildPlayRoom(scrape);
 	const legal = findLegalPlayMoves(room, seat, { limit, biasToEnemyHq });
-	const moves = [];
+	const moves: Array<{ fromR: number; fromC: number; toR: number; toC: number }> = [];
 	for (const { pieceId, to } of legal) {
 		const piece = room.pieces.get(pieceId);
 		if (!piece?.pos) continue;
@@ -257,11 +306,11 @@ export async function findLegalPlayMovesOnPage(page, seat, { limit = 64, biasToE
 }
 
 /** Find legal play moves for the current player during play. */
-export async function findPlayMoves(page, seat, limit = 24) {
+export async function findPlayMoves(page: any, seat: string, limit = 24) {
 	return findLegalPlayMovesOnPage(page, seat, { limit });
 }
 
-export async function applyMove(page, move) {
+export async function applyMove(page: any, move: { fromR: number; fromC: number; toR: number; toC: number }) {
 	await clickCell(page, move.fromR, move.fromC);
 	await page.waitForSelector(".token.selected", { timeout: 5_000 });
 	await clickCell(page, move.toR, move.toC);
@@ -274,7 +323,7 @@ export async function applyMove(page, move) {
 	);
 }
 
-export async function shufflePlacement(page, seat, count = 3) {
+export async function shufflePlacement(page: any, seat: string, count = 3) {
 	const swaps = await findPlacementSwaps(page, seat);
 	const moves = await findPlacementMoves(page, seat);
 	const attempts = [...swaps, ...moves];
@@ -292,17 +341,17 @@ export async function shufflePlacement(page, seat, count = 3) {
 	assert(done > 0, `No placement shuffles succeeded for seat ${seat}`);
 }
 
-export async function waitForMyTurn(page, timeout = 30_000) {
+export async function waitForMyTurn(page: any, timeout = 30_000) {
 	await page.waitForFunction(
 		() => /^Your Turn\b/.test((document.querySelector("#turnLine")?.textContent ?? "").trim()),
 		{ timeout }
 	);
 }
 
-export async function playOneMove(page, seat) {
+export async function playOneMove(page: any, seat: string) {
 	const moves = await findPlayMoves(page, seat);
 	assert(moves.length > 0, `No play moves found for seat ${seat}`);
-	let lastErr = null;
+	let lastErr: any = null;
 	for (const move of moves) {
 		try {
 			await applyMove(page, move);
@@ -314,14 +363,14 @@ export async function playOneMove(page, seat) {
 	throw lastErr ?? new Error(`All play moves failed for seat ${seat}`);
 }
 
-export async function waitForTurnToEnd(page, timeout = 15_000) {
+export async function waitForTurnToEnd(page: any, timeout = 15_000) {
 	await page.waitForFunction(
 		() => !/^Your Turn\b/.test((document.querySelector("#turnLine")?.textContent ?? "").trim()),
 		{ timeout }
 	);
 }
 
-export async function createTrackedPage(browser, label, errors) {
+export async function createTrackedPage(browser: any, label: string, errors: any[]) {
 	const context = await browser.newContext();
 	const page = await context.newPage();
 
@@ -339,7 +388,7 @@ export async function createTrackedPage(browser, label, errors) {
 }
 
 /** Seat four players in a 2v2 lobby (connected, placed, not yet ready). */
-export async function setup2v2Lobby(browser, errors) {
+export async function setup2v2Lobby(browser: any, errors: any[]) {
 	const p1 = await createTrackedPage(browser, "P1", errors);
 	await p1.page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
 	await p1.page.locator("#createRoomBtn").click();
@@ -368,7 +417,7 @@ export async function setup2v2Lobby(browser, errors) {
 }
 
 /** Ready all lobby players and wait for the play phase. */
-export async function start2v2Play(players) {
+export async function start2v2Play(players: Array<{ page: any }>) {
 	for (const p of players) await setReady(p.page);
 	await Promise.all(players.map((p) => expectText(p.page, "#phaseLine", /Phase:\s*play/, 20_000)));
 }

@@ -1,6 +1,6 @@
-import { chromium } from "playwright";
 import {
 	expectText,
+	launchSmokeBrowser,
 	sendChat,
 	setup2v2Lobby,
 	start2v2Play,
@@ -8,10 +8,10 @@ import {
 	waitForMyTurn,
 	playOneMove,
 	waitForTurnToEnd
-} from "./helpers.mjs";
+} from "./helpers.js";
 
 async function run() {
-	const browser = await chromium.launch();
+	const browser = await launchSmokeBrowser();
 	const errors = [];
 
 	const { roomUrl, players, seats } = await setup2v2Lobby(browser, errors);

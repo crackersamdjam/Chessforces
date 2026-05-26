@@ -1,10 +1,12 @@
-export const SEATS = /** @type {const} */ (["N", "E", "S", "W"]);
+import type { Phase, Seat } from "./types.js";
 
-export const PHASES = /** @type {const} */ ({
+export const SEATS = ["N", "E", "S", "W"] as const satisfies readonly Seat[];
+
+export const PHASES = {
 	LOBBY: "lobby",
 	PLAY: "play",
 	DONE: "done"
-});
+} as const satisfies Record<"LOBBY" | "PLAY" | "DONE", Phase>;
 
 export const PIECE_DEFS = [
 	{ type: "marshal", label: "司令(40)", rank: 9, count: 1 },

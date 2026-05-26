@@ -25,8 +25,10 @@ import {
 	roomSnapshotFor,
 	applySetupToRoom,
 	exportSetup,
-	exportGame
+	exportGame,
+	isClientToServerMessage
 } from "./lib/game/index.js";
+import type { ServerToClientMessage } from "./lib/game/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,7 +56,7 @@ app.use(express.static(publicDir, {
 	}
 }));
 
-function sendIndex(res) {
+function sendIndex(res: any) {
 	res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 	res.setHeader("Pragma", "no-cache");
 	res.setHeader("Expires", "0");
@@ -82,22 +84,22 @@ function nowMs() {
 	return Date.now();
 }
 
-function safeSend(ws, obj) {
+function safeSend(ws: any, obj: ServerToClientMessage) {
 	if (!ws || ws.readyState !== ws.OPEN) return;
 	ws.send(JSON.stringify(obj));
 }
 
-function broadcast(room, obj) {
+function broadcast(room: any, obj: ServerToClientMessage) {
 	for (const p of room.players.values()) safeSend(p.ws, obj);
 }
 
-function broadcastState(room) {
+function broadcastState(room: any) {
 	for (const [pid, p] of room.players) {
 		safeSend(p.ws, { type: "state", state: roomSnapshotFor(room, pid) });
 	}
 }
 
-function getOrCreateRoom(roomId) {
+function getOrCreateRoom(roomId: string) {
 	let room = rooms.get(roomId);
 	if (!room) {
 		room = createRoom(roomId, { turnDurationMs: TURN_TIMEOUT_MS });
@@ -106,11 +108,11 @@ function getOrCreateRoom(roomId) {
 	return room;
 }
 
-function disconnectTimerKey(roomId, playerId) {
+function disconnectTimerKey(roomId: string, playerId: string) {
 	return `${roomId}:${playerId}`;
 }
 
-function clearDisconnectTimer(roomId, playerId) {
+function clearDisconnectTimer(roomId: string, playerId: string) {
 	const key = disconnectTimerKey(roomId, playerId);
 	const timer = disconnectTimers.get(key);
 	if (timer) {
@@ -119,7 +121,7 @@ function clearDisconnectTimer(roomId, playerId) {
 	}
 }
 
-function clearTurnTimer(roomId) {
+function clearTurnTimer(roomId: string) {
 	const timer = turnTimers.get(roomId);
 	if (timer) {
 		clearTimeout(timer);
@@ -127,7 +129,7 @@ function clearTurnTimer(roomId) {
 	}
 }
 
-function scheduleTurnTimer(room) {
+function scheduleTurnTimer(room: any) {
 	clearTurnTimer(room.id);
 	if (room.phase !== PHASES.PLAY || !room.turnSeat || !room.turnDeadlineAt) return;
 	const delayMs = Math.max(0, room.turnDeadlineAt - nowMs());
@@ -158,7 +160,7 @@ function scheduleTurnTimer(room) {
 	turnTimers.set(room.id, timer);
 }
 
-function finalizeDisconnectedPlayer(room, playerId) {
+function finalizeDisconnectedPlayer(room: any, playerId: string) {
 	const player = room.players.get(playerId);
 	if (!player) return;
 	clearDisconnectTimer(room.id, playerId);
@@ -191,7 +193,7 @@ function finalizeDisconnectedPlayer(room, playerId) {
 	scheduleTurnTimer(room);
 }
 
-function scheduleDisconnectFinalization(room, playerId) {
+function scheduleDisconnectFinalization(room: any, playerId: string) {
 	const player = room.players.get(playerId);
 	if (!player) return;
 	player.disconnectedAt = nowMs();
@@ -220,7 +222,7 @@ wss.on("connection", (ws, req) => {
 	const room = getOrCreateRoom(roomId);
 	scheduleTurnTimer(room);
 	const reconnectToken = String(url.searchParams.get("session") ?? "").trim();
-	let player = null;
+	let player: any = null;
 	if (reconnectToken) {
 		for (const candidate of room.players.values()) {
 			if (candidate.reconnectToken === reconnectToken) {
@@ -265,14 +267,14 @@ wss.on("connection", (ws, req) => {
 	broadcastState(room);
 
 	ws.on("message", (raw) => {
-		let msg;
+		let msg: unknown;
 		try {
 			msg = JSON.parse(String(raw));
 		} catch {
 			return;
 		}
 
-		if (!msg || typeof msg.type !== "string") return;
+		if (!isClientToServerMessage(msg)) return;
 		room.updatedAt = nowMs();
 
 		if (msg.type === "set_name") {
@@ -284,13 +286,13 @@ wss.on("connection", (ws, req) => {
 		if (msg.type === "take_seat") {
 			if (room.phase === PHASES.PLAY || room.phase === PHASES.DONE) return;
 			const seat = String(msg.seat ?? "");
-			if (!SEATS.includes(seat)) return;
+			if (!SEATS.includes(seat as (typeof SEATS)[number])) return;
 			if (room.seatToPlayerId.has(seat)) return;
 			if (player.seat) {
 				room.seatToPlayerId.delete(player.seat);
 				player.ready = false;
 			}
-			player.seat = seat;
+			player.seat = seat as (typeof SEATS)[number];
 			room.seatToPlayerId.set(seat, player.id);
 			ensurePieceSet(room, player.id);
 			broadcast(room, { type: "presence" });
@@ -407,7 +409,7 @@ wss.on("connection", (ws, req) => {
 				type: "draw_offer_result",
 				ok: true,
 				seat: result.seat,
-				offeredSeats: result.offeredSeats,
+				offeredSeats: result.offeredSeats as (typeof SEATS)[number][],
 				accepted: result.accepted
 			});
 			broadcastState(room);

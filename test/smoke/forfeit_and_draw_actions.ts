@@ -1,4 +1,3 @@
-import { chromium } from "playwright";
 import {
 	BASE_URL,
 	assert,
@@ -7,13 +6,14 @@ import {
 	expectText,
 	forfeitGame,
 	offerDraw,
+	launchSmokeBrowser,
 	playOneMove,
 	setName,
 	setReady,
 	waitForMyTurn,
 	waitForPlacementComplete,
 	waitForTurnToEnd
-} from "./helpers.mjs";
+} from "./helpers.js";
 
 async function setupTwoPlayerGame(browser, errors, label) {
 	const p1 = await createTrackedPage(browser, `${label}-P1`, errors);
@@ -90,7 +90,7 @@ async function runForfeitScenario(browser, errors) {
 }
 
 async function run() {
-	const browser = await chromium.launch();
+	const browser = await launchSmokeBrowser();
 	const errors = [];
 	try {
 		await runDrawOfferScenario(browser, errors);

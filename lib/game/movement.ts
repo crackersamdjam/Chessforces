@@ -1,7 +1,7 @@
 import { boardCellAt, getRailAdj } from "./board.js";
 import { eliminatePlayer, isFriendly, pieceAt } from "./state.js";
 
-export function isValidRoadStep(room, from, to) {
+export function isValidRoadStep(room: any, from: any, to: any) {
 	const dr = Math.abs(to.r - from.r), dc = Math.abs(to.c - from.c);
 	if (dr + dc === 1) return true;
 	if (dr === 1 && dc === 1) {
@@ -12,7 +12,7 @@ export function isValidRoadStep(room, from, to) {
 	return false;
 }
 
-export function isValidRailwayMove(room, piece, from, to) {
+export function isValidRailwayMove(room: any, piece: any, from: any, to: any) {
 	if (boardCellAt(room.board, from)?.type === "hq") return false;
 
 	const adj = getRailAdj(room);
@@ -22,8 +22,8 @@ export function isValidRailwayMove(room, piece, from, to) {
 
 	if (piece.type === "engineer") {
 		const fromCell = boardCellAt(room.board, from);
-		const visited = new Set();
-		const queue = [];
+		const visited = new Set<string>();
+		const queue: any[] = [];
 
 		if (fromCell?.type === "mountain") {
 			visited.add(startKey);
@@ -45,6 +45,7 @@ export function isValidRailwayMove(room, piece, from, to) {
 
 		while (queue.length > 0) {
 			const cur = queue.shift();
+			if (!cur) continue;
 			for (const next of (adj.get(`${cur.r},${cur.c}`) ?? [])) {
 				const nk = `${next.r},${next.c}`;
 				if (visited.has(nk)) continue;
@@ -65,9 +66,9 @@ export function isValidRailwayMove(room, piece, from, to) {
 
 	if (!adj.has(startKey)) return false;
 
-	const visited = new Set();
+	const visited = new Set<string>();
 
-	function dfs(r, c, dr, dc) {
+	function dfs(r: number, c: number, dr: number, dc: number) {
 		const isFirstStep = dr === 0 && dc === 0;
 		for (const next of (adj.get(`${r},${c}`) ?? [])) {
 			const ndr = Math.sign(next.r - r);
@@ -96,7 +97,7 @@ export function isValidRailwayMove(room, piece, from, to) {
 	return dfs(from.r, from.c, 0, 0);
 }
 
-export function canMovePiece(room, piece) {
+export function canMovePiece(room: any, piece: any) {
 	if (!piece.alive || !piece.pos || piece.type === "flag" || piece.type === "mine") return false;
 	const ownSeat = room.players.get(piece.ownerId)?.seat;
 	if (!ownSeat) return false;
@@ -124,7 +125,7 @@ export function canMovePiece(room, piece) {
 	return false;
 }
 
-export function hasMovablePieces(room, seat) {
+export function hasMovablePieces(room: any, seat: string) {
 	const playerId = room.seatToPlayerId.get(seat);
 	if (!playerId) return false;
 	for (const piece of room.pieces.values()) {
@@ -134,7 +135,7 @@ export function hasMovablePieces(room, seat) {
 	return false;
 }
 
-export function checkEliminations(room) {
+export function checkEliminations(room: any) {
 	for (const [seat] of room.seatToPlayerId) {
 		if (room.eliminatedSeats.has(seat)) continue;
 		if (!hasMovablePieces(room, seat)) {

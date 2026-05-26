@@ -8,7 +8,7 @@ The name comes from Codeforces culture: after a round, people would coin names l
 
 - **Runtime**: Node.js
 - **Server**: [Express](https://expressjs.com/) for static files and HTTP; [ws](https://github.com/websockets/ws) for real-time room sync
-- **Client**: vanilla HTML, CSS, and JS
+- **Client**: vanilla HTML, CSS, and TypeScript
 - **IDs**: [nanoid](https://github.com/ai/nanoid) for room links
 - **Tests**: Node.js unit tests (`test/unit/`); Playwright smoke tests (`test/smoke/`)
 
@@ -17,6 +17,13 @@ The name comes from Codeforces culture: after a round, people would coin names l
 ```bash
 npm install
 npm run dev
+```
+
+Type-check and build commands:
+
+```bash
+npm run typecheck
+npm run build
 ```
 
 Then open:
