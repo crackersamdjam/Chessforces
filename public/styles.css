@@ -231,6 +231,13 @@ body {
 	background: rgba(124, 58, 237, 0.28);
 	border-color: rgba(124, 58, 237, 0.55);
 }
+.btn.danger {
+	background: rgba(239, 68, 68, 0.2);
+	border-color: rgba(239, 68, 68, 0.5);
+}
+.btn.danger:hover {
+	background: rgba(239, 68, 68, 0.3);
+}
 
 .divider {
 	height: 1px;
@@ -305,6 +312,7 @@ body {
 
 .boardTools {
 	margin-top: 8px;
+	flex-wrap: wrap;
 }
 
 .historyLine {

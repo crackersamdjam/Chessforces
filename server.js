@@ -11,6 +11,8 @@ import {
 	MIN_TURN_DURATION_SEC,
 	MAX_TURN_DURATION_SEC,
 	applyMove,
+	applyForfeit,
+	applyOfferDraw,
 	applyPlacement,
 	allPiecesPlaced,
 	createRoom,
@@ -171,6 +173,7 @@ function finalizeDisconnectedPlayer(room, playerId) {
 
 	if (room.phase === PHASES.PLAY && player.seat) {
 		eliminatePlayer(room, player.seat);
+		room.drawOfferSeats = new Set();
 		if (room.turnSeat === player.seat) {
 			room.turnSeat = nextOccupiedSeat(room, player.seat);
 			resetTurnTimer(room);
@@ -373,6 +376,41 @@ wss.on("connection", (ws, req) => {
 					state: roomSnapshotFor(room, pid)
 				});
 			}
+			scheduleTurnTimer(room);
+			return;
+		}
+
+		if (msg.type === "forfeit") {
+			const result = applyForfeit(room, player.id);
+			if (!result.ok) {
+				safeSend(ws, { type: "forfeit_result", ok: false, reason: result.reason });
+				return;
+			}
+			broadcast(room, {
+				type: "forfeit_result",
+				ok: true,
+				seat: result.seat,
+				by: { id: player.id, name: player.name, seat: player.seat }
+			});
+			broadcastState(room);
+			scheduleTurnTimer(room);
+			return;
+		}
+
+		if (msg.type === "offer_draw") {
+			const result = applyOfferDraw(room, player.id);
+			if (!result.ok) {
+				safeSend(ws, { type: "draw_offer_result", ok: false, reason: result.reason });
+				return;
+			}
+			broadcast(room, {
+				type: "draw_offer_result",
+				ok: true,
+				seat: result.seat,
+				offeredSeats: result.offeredSeats,
+				accepted: result.accepted
+			});
+			broadcastState(room);
 			scheduleTurnTimer(room);
 			return;
 		}

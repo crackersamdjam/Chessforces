@@ -70,6 +70,15 @@ export async function sendChat(page, text) {
 	await page.locator("#sendChatBtn").click();
 }
 
+export async function offerDraw(page) {
+	await page.locator("#offerDrawBtn").click();
+}
+
+export async function forfeitGame(page) {
+	page.once("dialog", (dialog) => dialog.accept());
+	await page.locator("#forfeitBtn").click();
+}
+
 export const HOME_ZONES = {
 	N: { minR: 0, maxR: 5, minC: 6, maxC: 10 },
 	S: { minR: 11, maxR: 16, minC: 6, maxC: 10 },

@@ -555,6 +555,29 @@ function render() {
 	const inPlay = liveState.phase === "play" || liveState.phase === "done";
 	const lobbyEl = $("lobbyControls");
 	if (lobbyEl) lobbyEl.style.display = inPlay ? "none" : "";
+
+	const eliminatedSeats = liveState.eliminatedSeats ?? [];
+	const activeSeatCount = liveState.players.filter((p) => p.seat && !eliminatedSeats.includes(p.seat)).length;
+	const offeredSeats = liveState.drawOfferSeats ?? [];
+	const hasOfferedDraw = Boolean(me?.seat) && offeredSeats.includes(me.seat);
+	const canUseInGameActions =
+		liveState.phase === "play" &&
+		Boolean(me?.seat) &&
+		!eliminatedSeats.includes(me.seat) &&
+		!isViewingHistory();
+	const offerDrawBtn = $("offerDrawBtn");
+	if (offerDrawBtn) {
+		offerDrawBtn.disabled = !canUseInGameActions || hasOfferedDraw;
+		offerDrawBtn.classList.toggle("active", hasOfferedDraw);
+		offerDrawBtn.textContent =
+			activeSeatCount > 0
+				? `${hasOfferedDraw ? "Draw offered" : "Offer draw"} (${offeredSeats.length}/${activeSeatCount})`
+				: "Offer draw";
+	}
+	const forfeitBtn = $("forfeitBtn");
+	if (forfeitBtn) {
+		forfeitBtn.disabled = !canUseInGameActions;
+	}
 }
 
 function renderSeats(state) {
@@ -1061,6 +1084,33 @@ function initRoom(roomId) {
 				}
 				return;
 			}
+			if (msg.type === "forfeit_result") {
+				if (!msg.ok) {
+					setHint(`⚠ ${msg.reason}`);
+					setTimeout(() => setHint(""), 2500);
+					return;
+				}
+				const seat = msg.seat ? seatLabel(msg.seat) : "A player";
+				setHint(`${seat} forfeited.`);
+				setTimeout(() => setHint(""), 1800);
+				return;
+			}
+			if (msg.type === "draw_offer_result") {
+				if (!msg.ok) {
+					setHint(`⚠ ${msg.reason}`);
+					setTimeout(() => setHint(""), 2500);
+					return;
+				}
+				if (msg.accepted) {
+					setHint("Draw accepted.");
+					setTimeout(() => setHint(""), 1800);
+					return;
+				}
+				const offered = Array.isArray(msg.offeredSeats) ? msg.offeredSeats.length : 0;
+				setHint(`Draw offer recorded (${offered} total).`);
+				setTimeout(() => setHint(""), 1800);
+				return;
+			}
 			if (msg.type === "chat") {
 				addChatLine(msg);
 				return;
@@ -1210,6 +1260,13 @@ function initRoom(roomId) {
 	});
 	$("downloadGameBtn").addEventListener("click", () => {
 		send({ type: "export_game" });
+	});
+	$("offerDrawBtn").addEventListener("click", () => {
+		send({ type: "offer_draw" });
+	});
+	$("forfeitBtn").addEventListener("click", () => {
+		if (!confirm("Forfeit this game? This cannot be undone.")) return;
+		send({ type: "forfeit" });
 	});
 	$("historyBackBtn").addEventListener("click", () => {
 		stepHistory(-1);
