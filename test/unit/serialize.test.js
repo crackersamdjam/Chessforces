@@ -75,6 +75,21 @@ describe("serialize", () => {
 			/Unsupported game version/
 		);
 	});
+
+	it("returns an error for invalid setup input", () => {
+		const room = createTestRoom();
+		const { playerId } = addPlayer(room, { seat: "N" });
+		const result = applySetupToRoom(room, playerId, {
+			format: "chessforces-setup",
+			version: 1,
+			pieces: [
+				{ type: "major_general", slot: 0, pos: { depth: 0, lane: 0 } },
+				{ type: "major_general", slot: 0, pos: { depth: 1, lane: 0 } }
+			]
+		});
+		assert.equal(result.ok, false);
+		assert.match(result.reason, /Duplicate piece key major_general#0/);
+	});
 });
 
 function snapshotPieces(room) {

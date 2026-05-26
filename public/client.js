@@ -841,6 +841,21 @@ const HOME_ZONES = {
 	E: { minR: 6,	 maxR: 10, minC: 11, maxC: 16, orientation: "col", frontCol: 11, mineCols: [15, 16], hqCol: 16, hqRows: [7, 9] }
 };
 
+function boardPosToLocalPos(seat, pos) {
+	switch (seat) {
+		case "N":
+			return { depth: pos.r, lane: pos.c - 6 };
+		case "S":
+			return { depth: 16 - pos.r, lane: 10 - pos.c };
+		case "W":
+			return { depth: pos.c, lane: 10 - pos.r };
+		case "E":
+			return { depth: 16 - pos.c, lane: pos.r - 6 };
+		default:
+			return null;
+	}
+}
+
 function randomizePlacement() {
 	if (randomizeInFlight) return;
 	const state = app.state;
@@ -868,83 +883,97 @@ function randomizePlacement() {
 
 	randomizeInFlight = true;
 	try {
-	// Unplace all of my currently placed pieces so the server accepts re-placement.
-	for (const p of pieces) {
-		if (p.pos) send({ type: "place_piece", pieceId: p.id, pos: null });
-	}
+		const { cells } = state.board;
 
-	const { cells } = state.board;
+		function posKey(p) { return `${p.r},${p.c}`; }
 
-	function posKey(p) { return `${p.r},${p.c}`; }
-
-	// Only treat OTHER players' pieces as occupied — my own will be cleared by the messages above.
-	const occupied = new Set(
-		state.pieces.filter((p) => p.pos && !isMyPiece(state, p)).map((p) => posKey(p.pos))
-	);
-
-	function randomChoice(arr) {
-		if (!arr.length) return null;
-		return arr[Math.floor(Math.random() * arr.length)];
-	}
-
-	// Filter to home zone active cells only.
-	const allHomeCells = cells.filter(
-		(cell) =>
-			cell.r >= zone.minR && cell.r <= zone.maxR &&
-			cell.c >= zone.minC && cell.c <= zone.maxC &&
-			cell.type !== "inactive"
-	);
-	const postCells = allHomeCells.filter((cell) => cell.type === "post");
-	const hqCells		= allHomeCells.filter((cell) => cell.type === "hq");
-
-	let flagCells, mineCells, bombCells, normalCells;
-	if (zone.orientation === "row") {
-		// Flag: must go on the designated HQ cells.
-		flagCells		= hqCells.filter((cell) => cell.r === zone.hqRow && zone.hqCols.includes(cell.c));
-		// Mines: must stay in the back 2 rows (post cells only — no HQ/camp).
-		mineCells		= postCells.filter((cell) => zone.mineRows.includes(cell.r));
-		// Bombs: any post or HQ cell except the front row.
-		bombCells		= [...postCells, ...hqCells].filter((cell) => cell.r !== zone.frontRow);
-		// Normal officers/engineers: any post or HQ cell (including the front row).
-		normalCells = [...postCells, ...hqCells];
-	} else {
-		flagCells		= hqCells.filter((cell) => cell.c === zone.hqCol && zone.hqRows.includes(cell.r));
-		mineCells		= postCells.filter((cell) => zone.mineCols.includes(cell.c));
-		bombCells		= [...postCells, ...hqCells].filter((cell) => cell.c !== zone.frontCol);
-		normalCells = [...postCells, ...hqCells];
-	}
-
-	// Place flag first, then mines, then bombs, then officers/engineers.
-	const ordered = [
-		...pieces.filter((p) => p.label.startsWith("军旗")),
-		...pieces.filter((p) => p.label.startsWith("地雷")),
-		...pieces.filter((p) => p.label.startsWith("炸弹")),
-		...pieces.filter(
-			(p) => !p.label.startsWith("军旗") && !p.label.startsWith("地雷") && !p.label.startsWith("炸弹")
-		)
-	];
-
-	for (const piece of ordered) {
-		let candidates;
-		if (piece.label.startsWith("军旗")) {
-			candidates = flagCells;
-		} else if (piece.label.startsWith("地雷")) {
-			candidates = mineCells;
-		} else if (piece.label.startsWith("炸弹")) {
-			candidates = bombCells;
-		} else {
-			candidates = normalCells;
+		function randomChoice(arr) {
+			if (!arr.length) return null;
+			return arr[Math.floor(Math.random() * arr.length)];
 		}
 
-		const available = candidates.filter((p) => !occupied.has(posKey(p)));
-		if (!available.length) continue;
-		const pos = randomChoice(available);
-		occupied.add(posKey(pos));
-		send({ type: "place_piece", pieceId: piece.id, pos });
-	}
+		// Filter to home zone active cells only.
+		const allHomeCells = cells.filter(
+			(cell) =>
+				cell.r >= zone.minR && cell.r <= zone.maxR &&
+				cell.c >= zone.minC && cell.c <= zone.maxC &&
+				cell.type !== "inactive"
+		);
+		const postCells = allHomeCells.filter((cell) => cell.type === "post");
+		const hqCells		= allHomeCells.filter((cell) => cell.type === "hq");
 
-	setHint("Board randomized.");
-	setTimeout(() => setHint(""), 1400);
+		let flagCells, mineCells, bombCells, normalCells;
+		if (zone.orientation === "row") {
+			// Flag: must go on the designated HQ cells.
+			flagCells		= hqCells.filter((cell) => cell.r === zone.hqRow && zone.hqCols.includes(cell.c));
+			// Mines: must stay in the back 2 rows (post cells only — no HQ/camp).
+			mineCells		= postCells.filter((cell) => zone.mineRows.includes(cell.r));
+			// Bombs: any post or HQ cell except the front row.
+			bombCells		= [...postCells, ...hqCells].filter((cell) => cell.r !== zone.frontRow);
+			// Normal officers/engineers: any post or HQ cell (including the front row).
+			normalCells = [...postCells, ...hqCells];
+		} else {
+			flagCells		= hqCells.filter((cell) => cell.c === zone.hqCol && zone.hqRows.includes(cell.r));
+			mineCells		= postCells.filter((cell) => zone.mineCols.includes(cell.c));
+			bombCells		= [...postCells, ...hqCells].filter((cell) => cell.c !== zone.frontCol);
+			normalCells = [...postCells, ...hqCells];
+		}
+
+		// Place flag first, then mines, then bombs, then officers/engineers.
+		const ordered = [
+			...pieces.filter((p) => p.label.startsWith("军旗")),
+			...pieces.filter((p) => p.label.startsWith("地雷")),
+			...pieces.filter((p) => p.label.startsWith("炸弹")),
+			...pieces.filter(
+				(p) => !p.label.startsWith("军旗") && !p.label.startsWith("地雷") && !p.label.startsWith("炸弹")
+			)
+		];
+
+		const occupied = new Set();
+		const placementById = new Map();
+		for (const piece of ordered) {
+			let candidates;
+			if (piece.label.startsWith("军旗")) {
+				candidates = flagCells;
+			} else if (piece.label.startsWith("地雷")) {
+				candidates = mineCells;
+			} else if (piece.label.startsWith("炸弹")) {
+				candidates = bombCells;
+			} else {
+				candidates = normalCells;
+			}
+
+			const available = candidates.filter((p) => !occupied.has(posKey(p)));
+			if (!available.length) {
+				setHint("Could not find a full valid random setup.");
+				setTimeout(() => setHint(""), 1400);
+				return;
+			}
+			const pos = randomChoice(available);
+			occupied.add(posKey(pos));
+			placementById.set(piece.id, pos);
+		}
+
+		const setupPieces = pieces.map((piece) => {
+			const pos = placementById.get(piece.id);
+			return {
+				type: piece.type,
+				slot: Number.isInteger(piece.slot) ? piece.slot : 0,
+				pos: boardPosToLocalPos(me.seat, pos)
+			};
+		});
+
+		send({
+			type: "import_setup",
+			setup: {
+				format: "chessforces-setup",
+				version: 1,
+				pieces: setupPieces
+			}
+		});
+
+		setHint("Board randomized.");
+		setTimeout(() => setHint(""), 1400);
 	} finally {
 		randomizeInFlight = false;
 	}
