@@ -213,7 +213,7 @@ function renderTurnLine(state, me) {
 		? `Your Turn${timeSuffix}!`
 		: `Turn: ${state.turnSeat ? seatLabel(state.turnSeat) : "-"}${timeSuffix}`;
 	turnLine.classList.add(isMyTurn ? "turnLine--mine" : "turnLine--other");
-	if (Number.isInteger(secondsLeft) && secondsLeft <= 10) {
+	if (isMyTurn) {
 		turnLine.classList.add("turnLine--critical");
 	}
 }
