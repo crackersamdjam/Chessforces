@@ -289,8 +289,25 @@ function ensureSeatViews() {
 			const isMe = p && current && p.id === current.id;
 			const occupied = Boolean(p);
 			if (!occupied) {
+				// Snapshot current layout before the seat change so we can
+				// reapply the same relative positions in the new home zone.
+				if (current?.seat && state) {
+					const myPieces = state.pieces.filter(
+						(p) => isMyPiece(state, p) && p.label !== "?" && p.pos
+					);
+					pendingTransferSetup = myPieces.length
+						? myPieces.map((piece) => ({
+							type: piece.type,
+							slot: piece.slot,
+							pos: boardPosToLocalPos(current.seat, piece.pos)
+						}))
+						: null;
+				} else {
+					pendingTransferSetup = null;
+				}
 				send({ type: "take_seat", seat });
 			} else if (isMe) {
+				pendingTransferSetup = null;
 				send({ type: "leave_seat" });
 			}
 		});
@@ -958,7 +975,7 @@ function randomizePlacement() {
 			const pos = placementById.get(piece.id);
 			return {
 				type: piece.type,
-				slot: Number.isInteger(piece.slot) ? piece.slot : 0,
+				slot: piece.slot,
 				pos: boardPosToLocalPos(me.seat, pos)
 			};
 		});
@@ -983,6 +1000,9 @@ function randomizePlacement() {
 let autoPlacedSeat = null;
 let autoRandomizeTimer = null;
 let randomizeInFlight = false;
+// Local-coordinate snapshot captured before a seat switch; sent as import_setup
+// once the server confirms the new seat, preserving the player's layout.
+let pendingTransferSetup = null;
 
 function scheduleAutoRandomize() {
 	clearTimeout(autoRandomizeTimer);
@@ -990,6 +1010,16 @@ function scheduleAutoRandomize() {
 		autoRandomizeTimer = null;
 		randomizePlacement();
 	}, 250);
+}
+
+function sendTransferSetup() {
+	const setup = pendingTransferSetup;
+	pendingTransferSetup = null;
+	if (!setup) return;
+	send({
+		type: "import_setup",
+		setup: { format: "chessforces-setup", version: 1, pieces: setup }
+	});
 }
 
 function initLanding() {
@@ -1091,12 +1121,16 @@ function initRoom(roomId) {
 				if (selectedPieceId && !app.liveState.pieces.some((p) => p.id === selectedPieceId)) {
 					selectedPieceId = null;
 				}
-				// Auto-randomize as soon as the player takes a seat in the lobby.
+				// Auto-place as soon as the player takes a seat in the lobby.
 				if (msg.state.phase === "lobby") {
 					const me = msg.state.players.find((p) => p.id === app.playerId);
 					if (me?.seat && me.seat !== autoPlacedSeat) {
 						autoPlacedSeat = me.seat;
-						scheduleAutoRandomize();
+						if (pendingTransferSetup) {
+							sendTransferSetup();
+						} else {
+							scheduleAutoRandomize();
+						}
 					}
 				}
 				// Show hint on phase transitions.
