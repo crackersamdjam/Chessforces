@@ -1,2 +1,7 @@
 - use the bot logic from playthrough tests to play against bot players
-- allow browsing back and forward in current game move history
+- make move indicator (who's turn it is) more noticeable
+    - along with this, add a 30 second timer for each turn before you get skipped.
+- after reconnect, loses past moves of a current game. is there a way to preserve it? User-side?
+- add forfeit and offer draw buttons
+- after end of game, make all pieces visible and game downloadable
+- add github action for running tests on push

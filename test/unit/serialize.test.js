@@ -7,7 +7,7 @@ import {
 	parseGameDocument,
 	parseSetupDocument,
 	PHASES
-} from "../lib/game/index.js";
+} from "../../lib/game/index.js";
 import {
 	addPlayer,
 	createTestRoom,

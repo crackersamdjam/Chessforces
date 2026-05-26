@@ -11,8 +11,8 @@ import {
 	PHASES,
 	SEATS,
 	startGame
-} from "../lib/game/index.js";
-import { homeInfoForSeat } from "../lib/game/placement.js";
+} from "../../lib/game/index.js";
+import { homeInfoForSeat } from "../../lib/game/placement.js";
 
 let nextId = 0;
 

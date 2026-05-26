@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { boardCellAt, createBoard } from "../lib/game/index.js";
+import { boardCellAt, createBoard } from "../../lib/game/index.js";
 
 describe("board", () => {
 	it("creates a 17x17 grid", () => {

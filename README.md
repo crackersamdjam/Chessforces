@@ -10,7 +10,7 @@ The name comes from Codeforces culture: after a round, people would coin names l
 - **Server**: [Express](https://expressjs.com/) for static files and HTTP; [ws](https://github.com/websockets/ws) for real-time room sync
 - **Client**: vanilla HTML, CSS, and JS
 - **IDs**: [nanoid](https://github.com/ai/nanoid) for room links
-- **Tests**: Node.js built-in test runner; [Playwright](https://playwright.dev/) for end-to-end smoke tests
+- **Tests**: Node.js unit tests (`test/unit/`); Playwright smoke tests (`test/smoke/`)
 
 ## Run locally
 

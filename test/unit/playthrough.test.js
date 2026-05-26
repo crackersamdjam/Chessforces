@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyMove, enemyHqTargetsForSeat, eliminatePlayer, PHASES } from "../lib/game/index.js";
+import { applyMove, enemyHqTargetsForSeat, eliminatePlayer, PHASES } from "../../lib/game/index.js";
 import { createTestRoom, playBotMove, setup2v2ForPlaythrough } from "./helpers.js";
 
 const MAX_MOVES = 500;

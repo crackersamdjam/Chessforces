@@ -7,7 +7,7 @@ import {
 	PHASES,
 	resolveGameMode,
 	maybeAdvancePhase
-} from "../lib/game/index.js";
+} from "../../lib/game/index.js";
 import {
 	addPlayer,
 	assertPos,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { validatePlacement } from "../lib/game/index.js";
+import { validatePlacement } from "../../lib/game/index.js";
 import { addPlayer, createTestRoom, findPiece } from "./helpers.js";
 
 describe("placement", () => {

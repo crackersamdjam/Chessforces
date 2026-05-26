@@ -1,5 +1,5 @@
-import { createBoard } from "./lib/game/board.js";
-import { findLegalPlayMoves } from "./lib/game/play-moves.js";
+import { createBoard } from "../../lib/game/board.js";
+import { findLegalPlayMoves } from "../../lib/game/play-moves.js";
 
 export const BASE_URL = process.env.SMOKE_BASE_URL ?? "http://localhost:5173";
 

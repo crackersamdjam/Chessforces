@@ -6,11 +6,16 @@
 	"scripts": {
 		"dev": "node server.js",
 		"start": "node server.js",
-		"test": "node --test test/board.test.js test/placement.test.js test/combat.test.js test/movement.test.js test/actions.test.js test/playthrough.test.js test/serialize.test.js",
-		"test:playthrough": "LOG_PLAYTHROUGH=1 node --test test/playthrough.test.js",
-		"test:e2e": "node smoke-playwright.mjs",
-		"test:e2e:playthrough": "node smoke-playthrough.mjs",
-		"test:e2e:reconnect": "node smoke-reconnect.mjs"
+		"test": "node --test test/unit/*.test.js",
+		"test:playthrough": "LOG_PLAYTHROUGH=1 node --test test/unit/playthrough.test.js",
+		"test:smoke": "node test/smoke/lobby_round_and_chat.mjs && node test/smoke/playthrough_game.mjs && node test/smoke/reconnect.mjs",
+		"test:smoke:lobby": "node test/smoke/lobby_round_and_chat.mjs",
+		"test:smoke:playthrough": "node test/smoke/playthrough_game.mjs",
+		"test:smoke:reconnect": "node test/smoke/reconnect.mjs",
+		"test:e2e": "npm run test:smoke",
+		"test:e2e:lobby": "npm run test:smoke:lobby",
+		"test:e2e:playthrough": "npm run test:smoke:playthrough",
+		"test:e2e:reconnect": "npm run test:smoke:reconnect"
 	},
 	"dependencies": {
 		"express": "^4.19.2",

@@ -8,7 +8,7 @@ import {
 	waitForMyTurn,
 	playOneMove,
 	waitForTurnToEnd
-} from "./smoke-helpers.mjs";
+} from "./helpers.mjs";
 
 async function run() {
 	const browser = await chromium.launch();
@@ -16,7 +16,7 @@ async function run() {
 
 	const { roomUrl, players, seats } = await setup2v2Lobby(browser, errors);
 	// eslint-disable-next-line no-console
-	console.info(`smoke-playwright: open in browser while running → ${roomUrl}`);
+	console.info(`smoke-lobby-round-and-chat: open in browser while running → ${roomUrl}`);
 
 	// Manually shuffle a few pieces in each home zone before readying up.
 	for (let i = 0; i < players.length; i++) {

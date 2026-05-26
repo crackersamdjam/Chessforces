@@ -6,7 +6,7 @@ import {
 	expectText,
 	setName,
 	waitForPlacementComplete
-} from "./smoke-helpers.mjs";
+} from "./helpers.mjs";
 
 async function expectSeatIsMine(page, seat, timeout = 15_000) {
 	await page.waitForFunction(

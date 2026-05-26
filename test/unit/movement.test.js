@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
 	isValidRailwayMove,
 	isValidRoadStep
-} from "../lib/game/index.js";
+} from "../../lib/game/index.js";
 import { addPlayer, createTestRoom, setPieceAt } from "./helpers.js";
 
 describe("movement", () => {

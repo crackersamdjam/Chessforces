@@ -1,6 +1,6 @@
 /**
  * Browser E2E: four clients, lobby randomize, full 2v2 until game over.
- * For rules, moves, combat, and win conditions use test/playthrough.test.js
+ * For rules, moves, combat, and win conditions use test/unit/playthrough.test.js
  * (lib/game, no Playwright) — do not add more smoke tests for game logic.
  */
 import { chromium } from "playwright";
@@ -12,7 +12,7 @@ import {
 	setup2v2Lobby,
 	start2v2Play,
 	waitForTurnToEnd
-} from "./smoke-helpers.mjs";
+} from "./helpers.mjs";
 
 const MAX_MOVES = 5000;
 const GAME_TIMEOUT_MS = 120_000; // two minutes
@@ -48,14 +48,14 @@ async function isGameDone(page) {
 async function run() {
 	// eslint-disable-next-line no-console
 	console.info(
-		"smoke-playthrough: UI only. Game logic playthroughs belong in test/playthrough.test.js (npm test)."
+		"smoke-playthrough-game: UI only. Game logic playthroughs belong in test/unit/playthrough.test.js (npm test)."
 	);
 	const browser = await chromium.launch();
 	const errors = [];
 
 	const { roomUrl, players, seats } = await setup2v2Lobby(browser, errors);
 	// eslint-disable-next-line no-console
-	console.info(`smoke-playthrough: open in browser while running → ${roomUrl}`);
+	console.info(`smoke-playthrough-game: open in browser while running → ${roomUrl}`);
 	await start2v2Play(players);
 
 	let moves = 0;
@@ -108,7 +108,7 @@ run()
 		const reason = r.outcome?.terminationReason ?? "";
 		// eslint-disable-next-line no-console
 		console.log(
-			`smoke-playthrough: done after ${r.moves} moves — ${reason || "(no termination reason)"}`
+			`smoke-playthrough-game: done after ${r.moves} moves — ${reason || "(no termination reason)"}`
 		);
 		// eslint-disable-next-line no-console
 		console.log(JSON.stringify({ ok: true, ...r }, null, 2));

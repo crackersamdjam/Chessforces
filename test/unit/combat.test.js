@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveCapture } from "../lib/game/index.js";
+import { resolveCapture } from "../../lib/game/index.js";
 import { makePiece } from "./helpers.js";
 
 describe("combat", () => {
