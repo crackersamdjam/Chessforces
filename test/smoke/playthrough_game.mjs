@@ -46,7 +46,7 @@ async function isGameDone(page) {
 }
 
 async function run() {
-	// eslint-disable-next-line no-console
+	 
 	console.info(
 		"smoke-playthrough-game: UI only. Game logic playthroughs belong in test/unit/playthrough.test.js (npm test)."
 	);
@@ -54,7 +54,7 @@ async function run() {
 	const errors = [];
 
 	const { roomUrl, players, seats } = await setup2v2Lobby(browser, errors);
-	// eslint-disable-next-line no-console
+	 
 	console.info(`smoke-playthrough-game: open in browser while running → ${roomUrl}`);
 	await start2v2Play(players);
 
@@ -74,7 +74,7 @@ async function run() {
 			const move = await playAggressiveMove(players[i].page, seats[i]);
 			await waitForTurnToEnd(players[i].page);
 			moves++;
-			// eslint-disable-next-line no-console
+			 
 			console.log(
 				`#${moves} ${seats[i]}: (${move.fromR},${move.fromC}) → (${move.toR},${move.toC})`
 			);
@@ -106,16 +106,16 @@ async function run() {
 run()
 	.then((r) => {
 		const reason = r.outcome?.terminationReason ?? "";
-		// eslint-disable-next-line no-console
+		 
 		console.log(
 			`smoke-playthrough-game: done after ${r.moves} moves — ${reason || "(no termination reason)"}`
 		);
-		// eslint-disable-next-line no-console
+		 
 		console.log(JSON.stringify({ ok: true, ...r }, null, 2));
 		process.exitCode = r.errors?.length ? 2 : 0;
 	})
 	.catch((e) => {
-		// eslint-disable-next-line no-console
+		 
 		console.error(JSON.stringify({ ok: false, error: String(e?.stack ?? e) }, null, 2));
 		process.exitCode = 1;
 	});

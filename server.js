@@ -477,6 +477,6 @@ wss.on("connection", (ws, req) => {
 });
 
 server.listen(PORT, HOST, () => {
-	// eslint-disable-next-line no-console
+	 
 	console.log(`Chessforces server on http://${HOST}:${PORT}`);
 });

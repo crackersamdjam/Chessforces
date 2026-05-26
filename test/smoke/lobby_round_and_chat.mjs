@@ -15,7 +15,7 @@ async function run() {
 	const errors = [];
 
 	const { roomUrl, players, seats } = await setup2v2Lobby(browser, errors);
-	// eslint-disable-next-line no-console
+	 
 	console.info(`smoke-lobby-round-and-chat: open in browser while running → ${roomUrl}`);
 
 	// Manually shuffle a few pieces in each home zone before readying up.
@@ -53,12 +53,12 @@ async function run() {
 
 run()
 	.then((r) => {
-		// eslint-disable-next-line no-console
+		 
 		console.log(JSON.stringify({ ok: true, ...r }, null, 2));
 		process.exitCode = r.errors?.length ? 2 : 0;
 	})
 	.catch((e) => {
-		// eslint-disable-next-line no-console
+		 
 		console.error(JSON.stringify({ ok: false, error: String(e?.stack ?? e) }, null, 2));
 		process.exitCode = 1;
 	});

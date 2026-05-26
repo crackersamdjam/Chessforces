@@ -41,7 +41,7 @@ async function setupTwoPlayerGame(browser, errors, label) {
 
 async function runDrawOfferScenario(browser, errors) {
 	const { roomUrl, p1, p2 } = await setupTwoPlayerGame(browser, errors, "Draw");
-	// eslint-disable-next-line no-console
+	 
 	console.info(`smoke-forfeit-and-draw: draw scenario room → ${roomUrl}`);
 
 	await offerDraw(p1.page);
@@ -73,7 +73,7 @@ async function runDrawOfferScenario(browser, errors) {
 
 async function runForfeitScenario(browser, errors) {
 	const { roomUrl, p1, p2 } = await setupTwoPlayerGame(browser, errors, "Forfeit");
-	// eslint-disable-next-line no-console
+	 
 	console.info(`smoke-forfeit-and-draw: forfeit scenario room → ${roomUrl}`);
 
 	await forfeitGame(p2.page);
@@ -105,12 +105,12 @@ async function run() {
 
 run()
 	.then((r) => {
-		// eslint-disable-next-line no-console
+		 
 		console.log(JSON.stringify({ ok: true, ...r }, null, 2));
 		process.exitCode = r.errors?.length ? 2 : 0;
 	})
 	.catch((e) => {
-		// eslint-disable-next-line no-console
+		 
 		console.error(JSON.stringify({ ok: false, error: String(e?.stack ?? e) }, null, 2));
 		process.exitCode = 1;
 	});

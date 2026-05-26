@@ -23,7 +23,7 @@ async function run() {
 
 	const p2 = await createTrackedPage(browser, "P2", errors);
 	await p2.page.goto(roomUrl, { waitUntil: "domcontentloaded" });
-	// eslint-disable-next-line no-console
+	 
 	console.info(`smoke-turn-timer-skip: open in browser while running → ${roomUrl}`);
 
 	await setName(p1.page, "TimerP1");
@@ -64,12 +64,12 @@ async function run() {
 
 run()
 	.then((r) => {
-		// eslint-disable-next-line no-console
+		 
 		console.log(JSON.stringify({ ok: true, ...r }, null, 2));
 		process.exitCode = r.errors?.length ? 2 : 0;
 	})
 	.catch((e) => {
-		// eslint-disable-next-line no-console
+		 
 		console.error(JSON.stringify({ ok: false, error: String(e?.stack ?? e) }, null, 2));
 		process.exitCode = 1;
 	});

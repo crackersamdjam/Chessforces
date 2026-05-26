@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyMove, enemyHqTargetsForSeat, eliminatePlayer, PHASES } from "../../lib/game/index.js";
+import { enemyHqTargetsForSeat, eliminatePlayer, PHASES } from "../../lib/game/index.js";
 import { createTestRoom, playBotMove, setup2v2ForPlaythrough } from "./helpers.js";
 
 const MAX_MOVES = 500;
@@ -33,7 +33,7 @@ describe("2v2 playthrough", () => {
 			moves++;
 			const { from, to, by } = result.lastMove;
 			if (logPlaythrough) {
-				// eslint-disable-next-line no-console
+				 
 				console.log(`#${moves} ${by}: (${from.r},${from.c}) → (${to.r},${to.c})`);
 			}
 		}
@@ -45,7 +45,7 @@ describe("2v2 playthrough", () => {
 			"expected a team winner or draw"
 		);
 		if (logPlaythrough) {
-			// eslint-disable-next-line no-console
+			 
 			console.log(`Game over: team ${room.winnerTeam} (${moves} moves)`);
 		}
 	});
