@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { initPlaybackPage } from "./playback.js";
+import { buildReplayFromGameDoc } from "./game-replay.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -53,18 +54,22 @@ function writeSessionToken(roomId, token) {
 /** @type {WebSocket|null} */
 let socket = null;
 
-/** @type {{playerId:string|null, seats:string[], state:any|null, liveState:any|null, historySnapshots:any[], historyCursor:number}} */
+/** @type {{playerId:string|null, seats:string[], state:any|null, liveState:any|null, historySnapshots:any[], historyCursor:number, historySource:"live"|"replay"}} */
 const app = {
 	playerId: null,
 	seats: ["N", "E", "S", "W"],
 	state: null,
 	liveState: null,
 	historySnapshots: [],
-	historyCursor: 0
+	historyCursor: 0,
+	historySource: "live"
 };
 
 let selectedPieceId = null;
 let turnCountdownInterval = null;
+let pendingGameDownloadRequest = false;
+let pendingReplayHistoryRequest = false;
+let replayHistoryLoaded = false;
 
 function isPlayablePhase(phase) {
 	return phase === "play" || phase === "done";
@@ -88,7 +93,16 @@ function isViewingHistory() {
 }
 
 function syncHistoryWithLiveState(nextState) {
+	if (app.historySource === "replay" && nextState.phase === "done") {
+		if (app.historySnapshots.length > 0) {
+			app.state = app.historySnapshots[app.historyCursor];
+			return;
+		}
+		app.historySource = "live";
+	}
+
 	if (!isPlayablePhase(nextState.phase)) {
+		app.historySource = "live";
 		app.historySnapshots = [];
 		app.historyCursor = 0;
 		app.state = nextState;
@@ -97,6 +111,7 @@ function syncHistoryWithLiveState(nextState) {
 
 	const nextSnapshot = cloneState(nextState);
 	if (app.historySnapshots.length === 0) {
+		app.historySource = "live";
 		app.historySnapshots = [nextSnapshot];
 		app.historyCursor = 0;
 		app.state = nextSnapshot;
@@ -121,6 +136,52 @@ function syncHistoryWithLiveState(nextState) {
 		app.historyCursor = app.historySnapshots.length - 1;
 	}
 	app.state = app.historySnapshots[app.historyCursor];
+}
+
+function importGameReplayHistory(gameDoc) {
+	const liveState = app.liveState;
+	if (!liveState || liveState.phase !== "done") return false;
+	try {
+		const replay = buildReplayFromGameDoc(gameDoc);
+		const replaySnapshots = replay.snapshots.map((snapshot) => {
+			const pieces = [];
+			for (const [cellKey, piece] of snapshot.pieceByCell.entries()) {
+				const [r, c] = cellKey.split(",").map((v) => Number(v));
+				pieces.push({
+					id: `${piece.ownerSeat}:${piece.label}:${r},${c}`,
+					ownerSeat: piece.ownerSeat,
+					pos: { r, c },
+					label: piece.label,
+					type: null,
+					slot: null,
+					flagRevealed: true
+				});
+			}
+			return {
+				...cloneState(liveState),
+				pieces,
+				lastMove: snapshot.lastMove ?? null
+			};
+		});
+		if (!replaySnapshots.length) return false;
+		app.historySource = "replay";
+		app.historySnapshots = replaySnapshots;
+		app.historyCursor = replaySnapshots.length - 1;
+		app.state = app.historySnapshots[app.historyCursor];
+		return true;
+	} catch (err) {
+		setHint(err instanceof Error ? `⚠ ${err.message}` : "⚠ Invalid game history.");
+		setTimeout(() => setHint(""), 2500);
+		return false;
+	}
+}
+
+function requestReplayHistoryIfNeeded() {
+	const liveState = app.liveState ?? app.state;
+	if (!liveState || liveState.phase !== "done") return;
+	if (pendingReplayHistoryRequest || replayHistoryLoaded) return;
+	pendingReplayHistoryRequest = true;
+	send({ type: "export_game" });
 }
 
 function stepHistory(delta) {
@@ -1123,6 +1184,10 @@ function initRoom(roomId) {
 			if (msg.type === "state") {
 				const prevPhase = app.liveState?.phase;
 				app.liveState = msg.state;
+				if (msg.state.phase !== "done") {
+					pendingReplayHistoryRequest = false;
+					replayHistoryLoaded = false;
+				}
 				syncHistoryWithLiveState(msg.state);
 				// If selected piece got removed (bomb), clear selection.
 				if (selectedPieceId && !app.liveState.pieces.some((p) => p.id === selectedPieceId)) {
@@ -1144,6 +1209,7 @@ function initRoom(roomId) {
 				if (prevPhase !== msg.state.phase) {
 					if (msg.state.phase === "play") setHint("Game started. On your turn, select one of your pieces and move.");
 				}
+				requestReplayHistoryIfNeeded();
 				render();
 				return;
 			}
@@ -1197,14 +1263,27 @@ function initRoom(roomId) {
 				return;
 			}
 			if (msg.type === "game_file") {
+				const shouldDownload = pendingGameDownloadRequest;
+				pendingGameDownloadRequest = false;
+				const shouldImportReplay =
+					pendingReplayHistoryRequest ||
+					((app.liveState?.phase ?? app.state?.phase) === "done" && !replayHistoryLoaded);
+				pendingReplayHistoryRequest = false;
 				if (!msg.ok) {
 					setHint(`⚠ ${msg.reason}`);
 					setTimeout(() => setHint(""), 2500);
 					return;
 				}
-				downloadJsonFile(msg.game, `game-${roomId}.chessforces-game.json`);
-				setHint("Game file downloaded.");
-				setTimeout(() => setHint(""), 1500);
+				if (shouldImportReplay) {
+					replayHistoryLoaded = importGameReplayHistory(msg.game);
+				}
+				if (shouldDownload) {
+					downloadJsonFile(msg.game, `game-${roomId}.chessforces-game.json`);
+					setHint("Game file downloaded.");
+					setTimeout(() => setHint(""), 1500);
+				} else if (replayHistoryLoaded) {
+					render();
+				}
 				return;
 			}
 			if (msg.type === "import_setup_result") {
@@ -1329,6 +1408,7 @@ function initRoom(roomId) {
 		}
 	});
 	$("downloadGameBtn").addEventListener("click", () => {
+		pendingGameDownloadRequest = true;
 		send({ type: "export_game" });
 	});
 	$("offerDrawBtn").addEventListener("click", () => {

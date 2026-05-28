@@ -1,5 +1,6 @@
 import {
 	assert,
+	expectDoneHistoryRevealed,
 	expectGameDownloadable,
 	expectText,
 	forfeitGame,
@@ -25,6 +26,7 @@ async function runDrawDownload(browser: any, errors: any[], seats: string[], lab
 		await expectText(p.page, "#phaseLine", /Phase:\s*done/, 15_000);
 		await expectText(p.page, "#turnLine", /Game over\.\s*Draw\./, 10_000);
 	}
+	await expectDoneHistoryRevealed(players[0].page, seats[0]);
 
 	const filename = await expectGameDownloadable(players[0].page);
 	 

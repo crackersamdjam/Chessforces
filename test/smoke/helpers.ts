@@ -490,3 +490,21 @@ export async function expectGameDownloadable(page: any, timeout = 10_000) {
 	);
 	return filename;
 }
+
+/** At game end, in-room history should show enemy piece labels (not "?"). */
+export async function expectDoneHistoryRevealed(page: any, mySeat: string, timeout = 10_000) {
+	await page.waitForFunction(
+		({ mySeat }) => {
+			const tokens = Array.from(document.querySelectorAll<HTMLElement>(".token"));
+			const seats = ["N", "E", "S", "W"];
+			return tokens.some((token) => {
+				const ownerSeat = seats.find((seat) => token.classList.contains(`token--seat-${seat}`));
+				if (!ownerSeat || ownerSeat === mySeat) return false;
+				const label = token.querySelector(".label")?.textContent?.trim() ?? "";
+				return label.length > 0 && label !== "?";
+			});
+		},
+		{ mySeat },
+		{ timeout }
+	);
+}
