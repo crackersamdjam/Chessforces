@@ -47,7 +47,8 @@ export async function launchSmokeBrowser() {
 		const executablePath = resolveBrowserPath();
 		if (!executablePath) {
 			throw new Error(
-				"Playwright browser binary is missing. Run `npx playwright install` or set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH to an installed Chrome/Chromium executable."
+				"Playwright browser binary is missing. Run `npx playwright install` or set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH to an installed Chrome/Chromium executable.",
+				{ cause: error }
 			);
 		}
 		return chromium.launch({ executablePath });
@@ -420,4 +421,72 @@ export async function setup2v2Lobby(browser: any, errors: any[]) {
 export async function start2v2Play(players: Array<{ page: any }>) {
 	for (const p of players) await setReady(p.page);
 	await Promise.all(players.map((p) => expectText(p.page, "#phaseLine", /Phase:\s*play/, 20_000)));
+}
+
+/**
+ * Generic N-seat game setup: connect every player, name them, sit them in the
+ * requested seats, randomize placement, set a generous turn timer, ready up and
+ * wait for the play phase. Seat count drives the game mode (4 seats → 2v2).
+ */
+export async function setupSeatedGame(
+	browser: any,
+	errors: any[],
+	seats: string[],
+	label: string,
+	turnSeconds = 60
+) {
+	const p1 = await createTrackedPage(browser, `${label}-1`, errors);
+	await p1.page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
+	await p1.page.locator("#createRoomBtn").click();
+	await p1.page.waitForURL(/\/room\/[A-Za-z0-9_-]+$/);
+	const roomUrl = p1.page.url();
+
+	const players = [p1];
+	for (let i = 1; i < seats.length; i++) {
+		const p = await createTrackedPage(browser, `${label}-${i + 1}`, errors);
+		await p.page.goto(roomUrl, { waitUntil: "domcontentloaded" });
+		players.push(p);
+	}
+
+	for (let i = 0; i < seats.length; i++) {
+		await setName(players[i].page, `${label}${i + 1}`);
+		await clickSeat(players[i].page, seats[i]);
+		await waitForPlacementComplete(players[i].page, seats[i]);
+	}
+
+	// Generous turn timer so multi-step end sequences (e.g. several forfeits or
+	// every player offering a draw) are not disrupted by turn-timeout skips.
+	await players[0].page.locator("#turnDurationInput").fill(String(turnSeconds));
+	await players[0].page.locator("#saveTurnDurationBtn").click();
+	await expectText(players[0].page, "#hint", new RegExp(`Turn timer set to ${turnSeconds}s\\.`), 10_000);
+
+	for (const p of players) await setReady(p.page);
+	for (const p of players) await expectText(p.page, "#phaseLine", /Phase:\s*play/, 20_000);
+
+	return { roomUrl, players, seats };
+}
+
+/**
+ * Assert the finished game is downloadable: the Download game button must be
+ * visible and enabled, and clicking it must trigger a `.chessforces-game.json`
+ * download. Returns the suggested filename.
+ */
+export async function expectGameDownloadable(page: any, timeout = 10_000) {
+	await page.waitForFunction(
+		() => {
+			const btn = document.querySelector<HTMLButtonElement>("#downloadGameBtn");
+			return Boolean(btn && btn.offsetParent !== null && !btn.disabled);
+		},
+		{ timeout }
+	);
+	const [download] = await Promise.all([
+		page.waitForEvent("download", { timeout }),
+		page.locator("#downloadGameBtn").click()
+	]);
+	const filename = download.suggestedFilename();
+	assert(
+		/\.chessforces-game\.json$/.test(filename),
+		`Expected a chessforces game download, got "${filename}".`
+	);
+	return filename;
 }
