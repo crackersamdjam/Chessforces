@@ -479,6 +479,5 @@ wss.on("connection", (ws, req) => {
 });
 
 server.listen(PORT, HOST, () => {
-	 
 	console.log(`Chessforces server on http://${HOST}:${PORT}`);
 });

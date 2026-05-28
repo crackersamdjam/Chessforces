@@ -1,9 +1,11 @@
 // @ts-nocheck
 import { buildReplayFromGameDoc } from "./game-replay.js";
+import { buildBoardViews, createBoard } from "./board-view.js";
 
 export function initPlaybackPage() {
 	const board = createBoard();
-	const boardViews = buildBoardViews("replayBoard", board);
+	const boardEl = document.getElementById("replayBoard");
+	const boardViews = buildBoardViews(boardEl, board);
 	/** @type {{moves:any[], snapshots:any[], result:any}|null} */
 	let replay = null;
 	let moveIndex = 0;
@@ -90,56 +92,6 @@ export function initPlaybackPage() {
 	});
 
 	render();
-}
-
-function buildBoardViews(boardId, board) {
-	const boardEl = document.getElementById(boardId);
-	boardEl.style.gridTemplateColumns = `repeat(${board.cols}, 1fr)`;
-	boardEl.style.gridTemplateRows = `repeat(${board.rows}, 1fr)`;
-	boardEl.innerHTML = "";
-	const views = new Map();
-	for (const cellDef of board.cells) {
-		const { r, c, type } = cellDef;
-		const cell = document.createElement("div");
-		const key = `${r},${c}`;
-		if (type === "inactive" || type === "railonly") {
-			cell.className = "cell cell--inactive";
-			boardEl.appendChild(cell);
-			continue;
-		}
-		cell.className = "cell";
-		if (type === "camp") cell.classList.add("cell--camp");
-		if (type === "hq") cell.classList.add("cell--hq");
-		if (type === "mountain") cell.classList.add("cell--mountain");
-		const host = document.createElement("div");
-		host.className = "cellTokenHost";
-		cell.appendChild(host);
-		boardEl.appendChild(cell);
-		views.set(key, { cell, tokenHost: host });
-	}
-	return views;
-}
-
-function createBoard() {
-	const rows = 17;
-	const cols = 17;
-	const cells = [];
-	for (let r = 0; r < rows; r++) {
-		for (let c = 0; c < cols; c++) {
-			const active = (c >= 6 && c <= 10) || (r >= 6 && r <= 10);
-			cells.push({ r, c, type: active ? "post" : "inactive" });
-		}
-	}
-	function mark(r, c, type) {
-		if (r < 0 || r >= rows || c < 0 || c >= cols) return;
-		const idx = r * cols + c;
-		if (cells[idx].type !== "inactive") cells[idx].type = type;
-	}
-	for (const [r, c] of [[0, 7], [0, 9], [16, 7], [16, 9], [7, 0], [9, 0], [7, 16], [9, 16]]) mark(r, c, "hq");
-	for (const [r, c] of [[2, 7], [2, 9], [3, 8], [4, 7], [4, 9], [12, 7], [12, 9], [13, 8], [14, 7], [14, 9], [7, 2], [9, 2], [8, 3], [7, 4], [9, 4], [7, 12], [9, 12], [8, 13], [7, 14], [9, 14]]) mark(r, c, "camp");
-	for (const [r, c] of [[6, 7], [7, 6], [6, 9], [7, 8], [7, 10], [9, 6], [9, 8], [9, 10], [10, 7], [10, 9], [8, 7], [8, 9]]) mark(r, c, "railonly");
-	for (const [r, c] of [[7, 7], [7, 9], [9, 7], [9, 9]]) mark(r, c, "mountain");
-	return { rows, cols, cells };
 }
 
 function escapeHtml(s) {
