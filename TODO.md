@@ -1,7 +1,7 @@
 - use the bot logic from playthrough tests to play against bot players
 - after reconnect, loses past moves of a current game. is there a way to preserve it? User-side?
 - after end of game, make all pieces visible and game downloadable
+    - local game histories don't have pieces shown, but server does, so can send/broadcast to clients
 - add github action for running tests on push
 - add sound effects
 - make a nicer favicon
-- keep your turn red, but when the timer's on another player's turn, don't add red highlight

@@ -568,7 +568,11 @@ function render() {
 	if (downloadSetupBtn) downloadSetupBtn.disabled = !canUseMySetupControls;
 	if (uploadSetupBtn) uploadSetupBtn.disabled = !canUseMySetupControls;
 	const downloadGameBtn = $("downloadGameBtn");
-	if (downloadGameBtn) downloadGameBtn.disabled = liveState.phase !== "done";
+	const gameDone = liveState.phase === "done";
+	if (downloadGameBtn) {
+		downloadGameBtn.disabled = !gameDone;
+		downloadGameBtn.style.display = gameDone ? "" : "none";
+	}
 	// Hide lobby controls (ready, randomize) once the game is under way.
 	const inPlay = liveState.phase === "play" || liveState.phase === "done";
 	const lobbyEl = $("lobbyControls");
@@ -585,6 +589,7 @@ function render() {
 		!isViewingHistory();
 	const offerDrawBtn = $("offerDrawBtn");
 	if (offerDrawBtn) {
+		offerDrawBtn.style.display = liveState.phase === "play" ? "" : "none";
 		offerDrawBtn.disabled = !canUseInGameActions || hasOfferedDraw;
 		offerDrawBtn.classList.toggle("active", hasOfferedDraw);
 		offerDrawBtn.textContent =
@@ -594,6 +599,7 @@ function render() {
 	}
 	const forfeitBtn = $("forfeitBtn");
 	if (forfeitBtn) {
+		forfeitBtn.style.display = liveState.phase === "play" ? "" : "none";
 		forfeitBtn.disabled = !canUseInGameActions;
 	}
 }
