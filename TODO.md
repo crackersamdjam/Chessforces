@@ -1,7 +1,6 @@
 - use the bot logic from playthrough tests to play against bot players
 - after reconnect, loses past moves of a current game. is there a way to preserve it? User-side?
-- after end of game, make all pieces visible and game downloadable
-    - local game histories don't have pieces shown, but server does, so can send/broadcast to clients
+- after a game ends, the game becomes downloadable. I also want players to be able to view the game history with pieces shown. We can reuse the logic for downloading games and import that, skipping to the end state and showing all pieces.
 - add github action for running tests on push
 - add sound effects
 - make a nicer favicon

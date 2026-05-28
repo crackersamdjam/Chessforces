@@ -58,6 +58,15 @@ export function findPiece(room: any, playerId: string, type: string) {
 	return null;
 }
 
+export function findDeadFlag(room: any, playerId: string) {
+	for (const piece of room.pieces.values()) {
+		if (piece.ownerId === playerId && piece.type === "flag") {
+			return piece;
+		}
+	}
+	return null;
+}
+
 export function setPieceAt(room: any, playerId: string, type: string, pos: { r: number; c: number }) {
 	const piece = findPiece(room, playerId, type);
 	if (!piece) throw new Error(`No ${type} found for player ${playerId}`);

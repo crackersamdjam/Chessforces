@@ -116,13 +116,20 @@ export function applyMove(room: any, playerId: string, pieceId: string, to: any)
 		if (piece.alive !== false) piece.pos = to;
 
 		if (target.type === "marshal" && target.alive === false) {
-			for (const p of room.pieces.values()) {
-				if (p.ownerId === target.ownerId && p.type === "flag") {
-					p.flagRevealed = true;
+				for (const p of room.pieces.values()) {
+					if (p.ownerId === target.ownerId && p.type === "flag") {
+						p.flagRevealed = true;
+					}
 				}
 			}
-		}
-		if (target.type === "flag" && target.alive === false) {
+			if (piece.type === "marshal" && piece.alive === false) {
+				for (const p of room.pieces.values()) {
+					if (p.ownerId === piece.ownerId && p.type === "flag") {
+						p.flagRevealed = true;
+					}
+				}
+			}
+			if (target.type === "flag" && target.alive === false) {
 			const victimSeat = room.players.get(target.ownerId)?.seat;
 			if (victimSeat) eliminatePlayer(room, victimSeat);
 		}

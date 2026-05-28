@@ -12,6 +12,7 @@ import {
 	addPlayer,
 	assertPos,
 	createTestRoom,
+	findDeadFlag,
 	findPiece,
 	setPieceAt,
 	setupMinimalGame
@@ -161,5 +162,38 @@ describe("actions", () => {
 		checkForWin(room);
 		assert.equal(room.phase, PHASES.DONE);
 		assert.equal(room.winnerTeam, "NS");
+	});
+
+	it("killing defender's marshal reveals defender's flag immediately", () => {
+		const room = createTestRoom();
+		const players = setupMinimalGame(room, ["N", "E"]);
+		setPieceAt(room, players.N, "marshal", { r: 5, c: 8 });
+		setPieceAt(room, players.E, "marshal", { r: 6, c: 8 });
+		room.turnSeat = "N";
+		const marshal = findPiece(room, players.N, "marshal");
+		const result = applyMove(room, players.N, marshal.id, { r: 6, c: 8 });
+		assert.equal(result.ok, true);
+		assert.equal(result.capture?.result, "both");
+		// Both marshals die — both flags must be flagRevealed
+		const nFlag = findDeadFlag(room, players.N);
+		const eFlag = findDeadFlag(room, players.E);
+		assert.ok(nFlag?.flagRevealed, "attacker's flag should be revealed after marshal mutual kill");
+		assert.ok(eFlag?.flagRevealed, "defender's flag should be revealed after marshal mutual kill");
+	});
+
+	it("attacker's marshal dying to a bomb reveals attacker's flag", () => {
+		const room = createTestRoom();
+		const players = setupMinimalGame(room, ["N", "E"]);
+		setPieceAt(room, players.N, "marshal", { r: 5, c: 8 });
+		setPieceAt(room, players.E, "bomb", { r: 6, c: 8 });
+		room.turnSeat = "N";
+		const marshal = findPiece(room, players.N, "marshal");
+		const result = applyMove(room, players.N, marshal.id, { r: 6, c: 8 });
+		assert.equal(result.ok, true);
+		assert.equal(result.capture?.result, "both");
+		const nFlag = findDeadFlag(room, players.N);
+		const eFlag = findDeadFlag(room, players.E);
+		assert.ok(nFlag?.flagRevealed, "attacker's flag should be revealed when attacker's marshal dies");
+		assert.equal(eFlag?.flagRevealed, false, "defender's flag should NOT be revealed (bomb, not marshal)");
 	});
 });
