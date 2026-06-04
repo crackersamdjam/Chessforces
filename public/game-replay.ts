@@ -1,4 +1,3 @@
-// @ts-nocheck
 const PIECE_LABELS = {
 	marshal: "司令(40)",
 	general: "军长(39)",

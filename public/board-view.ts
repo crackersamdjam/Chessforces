@@ -1,10 +1,11 @@
-// @ts-nocheck
+type Cell = { r: number; c: number; type: string };
+type RailEdge = [{ r: number; c: number }, { r: number; c: number }];
 
 export function createBoard() {
 	const rows = 17;
 	const cols = 17;
-	const cells = [];
-	const railEdges = [];
+	const cells: Cell[] = [];
+	const railEdges: RailEdge[] = [];
 	for (let r = 0; r < rows; r++) {
 		for (let c = 0; c < cols; c++) {
 			const active = (c >= 6 && c <= 10) || (r >= 6 && r <= 10);
@@ -61,7 +62,16 @@ export function createBoard() {
 	return { rows, cols, cells, railEdges };
 }
 
-export function buildBoardViews(boardEl, board, options = {}) {
+type BoardViewOptions = {
+	onCellClick?: ((pos: { r: number; c: number }) => void) | null;
+	includeCoords?: boolean;
+};
+
+export function buildBoardViews(
+	boardEl: HTMLElement,
+	board: any,
+	options: BoardViewOptions = {}
+) {
 	const { onCellClick = null, includeCoords = false } = options;
 	const { rows, cols, cells, railEdges } = board;
 	boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;

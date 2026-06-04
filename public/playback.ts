@@ -1,13 +1,11 @@
-// @ts-nocheck
 import { buildReplayFromGameDoc } from "./game-replay.js";
 import { buildBoardViews, createBoard } from "./board-view.js";
 
 export function initPlaybackPage() {
 	const board = createBoard();
-	const boardEl = document.getElementById("replayBoard");
+	const boardEl = document.getElementById("replayBoard") as HTMLElement;
 	const boardViews = buildBoardViews(boardEl, board);
-	/** @type {{moves:any[], snapshots:any[], result:any}|null} */
-	let replay = null;
+	let replay: { moves: any[]; snapshots: any[]; result: any } | null = null;
 	let moveIndex = 0;
 
 	const fileInput = document.getElementById("playbackFileInput") as HTMLInputElement;
@@ -16,7 +14,7 @@ export function initPlaybackPage() {
 	const moveLabel = document.getElementById("replayMoveLabel") as HTMLElement;
 	const hint = document.getElementById("replayHint") as HTMLElement;
 
-	const setHint = (text) => {
+	const setHint = (text: string) => {
 		hint.textContent = text || "";
 	};
 
@@ -70,22 +68,22 @@ export function initPlaybackPage() {
 	});
 
 	seatFilter.addEventListener("change", render);
-	document.getElementById("replayFirstBtn").addEventListener("click", () => {
+	document.getElementById("replayFirstBtn")!.addEventListener("click", () => {
 		if (!replay) return;
 		moveIndex = 0;
 		render();
 	});
-	document.getElementById("replayPrevBtn").addEventListener("click", () => {
+	document.getElementById("replayPrevBtn")!.addEventListener("click", () => {
 		if (!replay) return;
 		moveIndex = Math.max(0, moveIndex - 1);
 		render();
 	});
-	document.getElementById("replayNextBtn").addEventListener("click", () => {
+	document.getElementById("replayNextBtn")!.addEventListener("click", () => {
 		if (!replay) return;
 		moveIndex = Math.min(replay.moves.length, moveIndex + 1);
 		render();
 	});
-	document.getElementById("replayLastBtn").addEventListener("click", () => {
+	document.getElementById("replayLastBtn")!.addEventListener("click", () => {
 		if (!replay) return;
 		moveIndex = replay.moves.length;
 		render();

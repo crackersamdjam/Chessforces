@@ -1,9 +1,10 @@
-// @ts-nocheck
 import { initPlaybackPage } from "./playback.js";
 import { buildReplayFromGameDoc } from "./game-replay.js";
 import { buildBoardViews } from "./board-view.js";
 
-const $ = (id) => document.getElementById(id);
+function $<T extends HTMLElement = HTMLElement>(id: string): T {
+	return document.getElementById(id) as T;
+}
 
 function genRoomId() {
 	// Simple client-side id generator; good enough for a casual game.
@@ -52,11 +53,19 @@ function writeSessionToken(roomId, token) {
 	}
 }
 
-/** @type {WebSocket|null} */
-let socket = null;
+let socket: WebSocket | null = null;
 
-/** @type {{playerId:string|null, seats:string[], state:any|null, liveState:any|null, historySnapshots:any[], historyCursor:number, historySource:"live"|"replay"}} */
-const app = {
+interface AppState {
+	playerId: string | null;
+	seats: string[];
+	state: any;
+	liveState: any;
+	historySnapshots: any[];
+	historyCursor: number;
+	historySource: "live" | "replay";
+}
+
+const app: AppState = {
 	playerId: null,
 	seats: ["N", "E", "S", "W"],
 	state: null,
@@ -66,8 +75,8 @@ const app = {
 	historySource: "live"
 };
 
-let selectedPieceId = null;
-let turnCountdownInterval = null;
+let selectedPieceId: string | null = null;
+let turnCountdownInterval: any = null;
 let pendingGameDownloadRequest = false;
 let pendingReplayHistoryRequest = false;
 let replayHistoryLoaded = false;
@@ -145,7 +154,7 @@ function importGameReplayHistory(gameDoc) {
 	try {
 		const replay = buildReplayFromGameDoc(gameDoc);
 		const replaySnapshots = replay.snapshots.map((snapshot) => {
-			const pieces = [];
+			const pieces: any[] = [];
 			for (const [cellKey, piece] of snapshot.pieceByCell.entries()) {
 				const [r, c] = cellKey.split(",").map((v) => Number(v));
 				pieces.push({
@@ -404,9 +413,9 @@ function renderHistoryControls(state, liveState) {
 	const currentMove = Math.min(totalMoves, app.historyCursor);
 	const viewingHistory = isViewingHistory();
 
-	const backBtn = $("historyBackBtn");
-	const forwardBtn = $("historyForwardBtn");
-	const liveBtn = $("historyLiveBtn");
+	const backBtn = $<HTMLButtonElement>("historyBackBtn");
+	const forwardBtn = $<HTMLButtonElement>("historyForwardBtn");
+	const liveBtn = $<HTMLButtonElement>("historyLiveBtn");
 	const historyLine = $("historyLine");
 
 	if (backBtn) backBtn.disabled = app.historyCursor <= 0;
@@ -445,8 +454,8 @@ function render() {
 	applyPerspective(state);
 	renderHistoryControls(state, liveState);
 
-	const turnDurationInput = $("turnDurationInput");
-	const saveTurnDurationBtn = $("saveTurnDurationBtn");
+	const turnDurationInput = $<HTMLInputElement>("turnDurationInput");
+	const saveTurnDurationBtn = $<HTMLButtonElement>("saveTurnDurationBtn");
 	const turnSeconds = turnDurationSecondsFromState(state);
 	if (turnDurationInput && document.activeElement !== turnDurationInput) {
 		turnDurationInput.value = String(turnSeconds);
@@ -463,17 +472,17 @@ function render() {
 	const myPieces = state.pieces.filter((p) => isMyPiece(state, p));
 	const allMyPiecesPlaced =
 		myPieces.length > 0 && myPieces.every((p) => p.pos !== null);
-	$("readyBtn").disabled = !me || !me.seat || me.ready || !allMyPiecesPlaced;
-	$("unreadyBtn").disabled = !me || !me.seat || !me.ready;
+	$<HTMLButtonElement>("readyBtn").disabled = !me || !me.seat || me.ready || !allMyPiecesPlaced;
+	$<HTMLButtonElement>("unreadyBtn").disabled = !me || !me.seat || !me.ready;
 	const canUseSetupControls = state.phase === "lobby";
 	const canUseMySetupControls = canUseSetupControls && Boolean(me?.seat);
 	const mySetupControls = $("mySetupControls");
 	if (mySetupControls) mySetupControls.style.display = canUseMySetupControls ? "" : "none";
-	const downloadSetupBtn = $("downloadSetupBtn");
-	const uploadSetupBtn = $("uploadSetupBtn");
+	const downloadSetupBtn = $<HTMLButtonElement>("downloadSetupBtn");
+	const uploadSetupBtn = $<HTMLButtonElement>("uploadSetupBtn");
 	if (downloadSetupBtn) downloadSetupBtn.disabled = !canUseMySetupControls;
 	if (uploadSetupBtn) uploadSetupBtn.disabled = !canUseMySetupControls;
-	const downloadGameBtn = $("downloadGameBtn");
+	const downloadGameBtn = $<HTMLButtonElement>("downloadGameBtn");
 	const gameDone = liveState.phase === "done";
 	if (downloadGameBtn) {
 		downloadGameBtn.disabled = !gameDone;
@@ -493,7 +502,7 @@ function render() {
 		Boolean(me?.seat) &&
 		!eliminatedSeats.includes(me.seat) &&
 		!isViewingHistory();
-	const offerDrawBtn = $("offerDrawBtn");
+	const offerDrawBtn = $<HTMLButtonElement>("offerDrawBtn");
 	if (offerDrawBtn) {
 		offerDrawBtn.style.display = liveState.phase === "play" ? "" : "none";
 		offerDrawBtn.disabled = !canUseInGameActions || hasOfferedDraw;
@@ -503,7 +512,7 @@ function render() {
 				? `${hasOfferedDraw ? "Draw offered" : "Offer draw"} (${offeredSeats.length}/${activeSeatCount})`
 				: "Offer draw";
 	}
-	const forfeitBtn = $("forfeitBtn");
+	const forfeitBtn = $<HTMLButtonElement>("forfeitBtn");
 	if (forfeitBtn) {
 		forfeitBtn.style.display = liveState.phase === "play" ? "" : "none";
 		forfeitBtn.disabled = !canUseInGameActions;
@@ -910,8 +919,8 @@ function randomizePlacement() {
 }
 
 // Track which seat we've already auto-placed for, so we only do it once.
-let autoPlacedSeat = null;
-let autoRandomizeTimer = null;
+let autoPlacedSeat: string | null = null;
+let autoRandomizeTimer: any = null;
 let randomizeInFlight = false;
 // Local-coordinate snapshot captured before a seat switch; sent as import_setup
 // once the server confirms the new seat, preserving the player's layout.
@@ -945,7 +954,7 @@ function initLanding() {
 	});
 
 	function joinRoom() {
-		const id = $("joinRoomInput").value.trim();
+		const id = $<HTMLInputElement>("joinRoomInput").value.trim();
 		if (!id) return;
 		location.href = `/room/${encodeURIComponent(id)}`;
 	}
@@ -965,7 +974,7 @@ function initRoom(roomId) {
 	$("playbackView").classList.add("hidden");
 	$("roomId").textContent = roomId;
 
-	let reconnectTimer = null;
+	let reconnectTimer: any = null;
 	let reconnectAttempts = 0;
 
 	function clearReconnectTimer() {
@@ -1187,7 +1196,7 @@ function initRoom(roomId) {
 	});
 
 	$("saveNameBtn").addEventListener("click", () => {
-		const name = $("nameInput").value.trim();
+		const name = $<HTMLInputElement>("nameInput").value.trim();
 		if (!name) return;
 		send({ type: "set_name", name });
 		setHint("Name saved.");
@@ -1198,7 +1207,7 @@ function initRoom(roomId) {
 	$("unreadyBtn").addEventListener("click", () => send({ type: "set_ready", ready: false }));
 
 	function sendTurnDuration() {
-		const input = $("turnDurationInput");
+		const input = $<HTMLInputElement>("turnDurationInput");
 		if (!input) return;
 		const seconds = Number(input.value);
 		if (!Number.isFinite(seconds) || !Number.isInteger(seconds) || seconds < 1 || seconds > 60) {
@@ -1215,9 +1224,9 @@ function initRoom(roomId) {
 	});
 
 	function sendChat() {
-		const text = $("chatInput").value.trim();
+		const text = $<HTMLInputElement>("chatInput").value.trim();
 		if (!text) return;
-		$("chatInput").value = "";
+		$<HTMLInputElement>("chatInput").value = "";
 		send({ type: "chat", text });
 	}
 
@@ -1239,7 +1248,7 @@ function initRoom(roomId) {
 		$("uploadSetupInput").click();
 	});
 	$("uploadSetupInput").addEventListener("change", async () => {
-		const file = $("uploadSetupInput").files?.[0];
+		const file = $<HTMLInputElement>("uploadSetupInput").files?.[0];
 		if (!file) return;
 		try {
 			const text = await file.text();
@@ -1249,7 +1258,7 @@ function initRoom(roomId) {
 			setHint("⚠ Invalid setup file.");
 			setTimeout(() => setHint(""), 2000);
 		} finally {
-			$("uploadSetupInput").value = "";
+			$<HTMLInputElement>("uploadSetupInput").value = "";
 		}
 	});
 	$("downloadGameBtn").addEventListener("click", () => {

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -89,12 +88,12 @@ describe("serialize", () => {
 			]
 		});
 		assert.equal(result.ok, false);
-		assert.match(result.reason, /Duplicate piece key major_general#0/);
+		assert.match(String(result.reason), /Duplicate piece key major_general#0/);
 	});
 });
 
 function snapshotPieces(room) {
-	const rows = [];
+	const rows: any[] = [];
 	for (const piece of room.pieces.values()) {
 		const seat = room.players.get(piece.ownerId)?.seat ?? null;
 		rows.push({
@@ -113,7 +112,7 @@ function snapshotPieces(room) {
 }
 
 function snapshotLocalPieces(room, playerId, seat) {
-	const rows = [];
+	const rows: any[] = [];
 	for (const piece of room.pieces.values()) {
 		if (piece.ownerId !== playerId) continue;
 		rows.push({

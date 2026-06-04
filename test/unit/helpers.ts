@@ -25,7 +25,7 @@ export function resetIdCounter() {
 	nextId = 0;
 }
 
-export function createTestRoom(overrides: Record<string, any> = {}) {
+export function createTestRoom(overrides: Record<string, any> = {}): any {
 	resetIdCounter();
 	return createRoom("test-room", overrides);
 }
@@ -199,7 +199,7 @@ function pieceAt(room: any, pos: { r: number; c: number }) {
 }
 
 /** Try biased legal moves first, then any legal move; returns applyMove result. */
-export function playBotMove(room: any, seat: string) {
+export function playBotMove(room: any, seat: string): any {
 	const playerId = room.seatToPlayerId.get(seat);
 	const candidates = [
 		...findLegalPlayMoves(room, seat, { biasToEnemyHq: true }),
