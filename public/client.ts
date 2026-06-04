@@ -413,11 +413,13 @@ function renderHistoryControls(state, liveState) {
 	const currentMove = Math.min(totalMoves, app.historyCursor);
 	const viewingHistory = isViewingHistory();
 
+	const firstBtn = $<HTMLButtonElement>("historyFirstBtn");
 	const backBtn = $<HTMLButtonElement>("historyBackBtn");
 	const forwardBtn = $<HTMLButtonElement>("historyForwardBtn");
 	const liveBtn = $<HTMLButtonElement>("historyLiveBtn");
 	const historyLine = $("historyLine");
 
+	if (firstBtn) firstBtn.disabled = app.historyCursor <= 0;
 	if (backBtn) backBtn.disabled = app.historyCursor <= 0;
 	if (forwardBtn) forwardBtn.disabled = app.historyCursor >= app.historySnapshots.length - 1;
 	if (liveBtn) {
@@ -1275,6 +1277,14 @@ function initRoom(roomId) {
 	$("forfeitBtn").addEventListener("click", () => {
 		if (!confirm("Forfeit this game? This cannot be undone.")) return;
 		send({ type: "forfeit" });
+	});
+	$("historyFirstBtn").addEventListener("click", () => {
+		if (!app.historySnapshots.length) return;
+		selectedPieceId = null;
+		setHint("");
+		app.historyCursor = 0;
+		app.state = app.historySnapshots[0];
+		render();
 	});
 	$("historyBackBtn").addEventListener("click", () => {
 		stepHistory(-1);

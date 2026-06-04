@@ -3,4 +3,4 @@
 - add github action for running tests on push
 - add sound effects
 - make a nicer favicon
-
+- add feature to kick player after disconnect, or should we just wait for the turn to skip before kicking?
