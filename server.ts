@@ -307,6 +307,11 @@ wss.on("connection", (ws, req) => {
 			if (player.seat) room.seatToPlayerId.delete(player.seat);
 			player.seat = null;
 			player.ready = false;
+			// A seatless player has no board presence; drop their pieces so they
+			// don't linger as ownerless (colorless) tokens in the snapshot.
+			for (const [pid, piece] of room.pieces) {
+				if (piece.ownerId === player.id) room.pieces.delete(pid);
+			}
 			broadcast(room, { type: "presence" });
 			for (const [pid, p] of room.players) {
 				safeSend(p.ws, { type: "state", state: roomSnapshotFor(room, pid) });

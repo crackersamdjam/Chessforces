@@ -1050,7 +1050,11 @@ function initRoom(roomId) {
 				// Auto-place as soon as the player takes a seat in the lobby.
 				if (msg.state.phase === "lobby") {
 					const me = msg.state.players.find((p) => p.id === app.playerId);
-					if (me?.seat && me.seat !== autoPlacedSeat) {
+					if (!me?.seat) {
+						// Seatless again (e.g. after leaving): forget the placed seat so
+						// re-taking the same seat re-triggers auto-placement.
+						autoPlacedSeat = null;
+					} else if (me.seat !== autoPlacedSeat) {
 						autoPlacedSeat = me.seat;
 						if (pendingTransferSetup) {
 							sendTransferSetup();
